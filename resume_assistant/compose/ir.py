@@ -189,6 +189,7 @@ def compose(
     by_id = {e.id: e for e in evidences}
 
     sections: list[IRSection] = []
+    used_ids: set[str] = set()
     for spec in template.sections:
         if spec.type == "education":
             sec = _edu_section(profile, spec.title)
@@ -200,12 +201,20 @@ def compose(
             sec = _interest_section(profile, job, spec.title)
         elif spec.type in {"projects", "experience"}:
             sec = None
-            chosen = [by_id[h.evidence_id] for h in report.hits if h.evidence_id in by_id][: spec.max_entries]
-            if spec.type == "experience":
-                chosen = [e for e in chosen if e.kind in {"intern", "research"}]
+            pool = [
+                by_id[h.evidence_id]
+                for h in report.hits
+                if h.evidence_id in by_id and h.evidence_id not in used_ids
+            ]
+            if spec.include_kinds is not None:
+                filtered = [e for e in pool if e.kind in spec.include_kinds]
+                # 过滤后为空则退回全池，避免整段消失
+                chosen = filtered or pool
             else:
-                chosen = [e for e in chosen if e.kind not in {"intern", "research"}] or chosen
+                chosen = pool
+            chosen = chosen[: spec.max_entries]
             if chosen:
+                used_ids |= {e.id for e in chosen}
                 bullets_map = _llm_bullets(job, chosen, spec.bullets_per_entry, llm, feedback=feedback)
                 entries: list[IREntry] = []
                 for ev in chosen:

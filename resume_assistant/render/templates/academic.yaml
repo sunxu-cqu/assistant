@@ -17,10 +17,12 @@ sections:
     title: 科研与实习经历
     max_entries: 3
     bullets_per_entry: 4
+    include_kinds: [intern, research]
   - type: projects
     title: 项目经历
     max_entries: 3
     bullets_per_entry: 3
+    include_kinds: [project, course, activity]
   - type: skills
     title: 专业技能
     max_entries: 1

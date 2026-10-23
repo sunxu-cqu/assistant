@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -49,9 +50,9 @@ USER_TMPL = """请从下面的项目资料中抽取成就单元。
       "subtitle": "来源说明，如 课程项目 / 暑期实习 / 实验室课题",
       "org": "学校或公司名",
       "role": "我的角色，如 负责人 / 后端开发 / 独立完成",
-      "period": "YYYY-MM ~ YYYY-MM，未知留空",
-      "domain_tags": ["领域标签，2-4个，如 推荐系统/图神经网络"],
-      "skill_tags": ["技术标签，2-6个，必须是资料中出现过的技术"],
+      "period": "YYYY-MM ~ YYYY-MM，只能填资料明确写出的时间；只有起始时间则写 YYYY-MM ~ 至今；无法确定就留空",
+      "domain_tags": ["领域标签，2-4个，如 推荐系统/图神经网络/计算机视觉"],
+      "skill_tags": ["技术标签：把资料中出现过的语言、框架、中间件、数据库、库、工具全部列出，最多12个，宁多勿漏"],
       "claim": "一句话主干结论，含可验证结果，≤50字",
       "star": {{
         "situation": "背景与约束，≤60字",
@@ -101,6 +102,31 @@ def _save_index(index: dict[str, Any]) -> None:
     INDEX_PATH.write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _normalize_period(raw: str) -> str:
+    """规范化时间区间：统一分隔符、合并重复波浪号、补齐悬空的「至今」。"""
+    p = (raw or "").strip()
+    if not p:
+        return ""
+    p = p.replace("/", "-")
+    # 先把「至今」类表述统一，避免下面的「至→~」误伤
+    p = re.sub(r"至今|现在|目前", "至今", p)
+    if p == "至今":
+        return "至今"
+    for sep in ("到", "—", "－", "–"):
+        p = p.replace(sep, "~")
+    p = re.sub(r"至(?!今)", "~", p)
+    p = re.sub(r"\s+-\s+", "~", p)
+    p = re.sub(r"\s*~+\s*", " ~ ", p).strip()
+    if p.endswith("~"):
+        p = p.rstrip("~ ").strip() + " ~ 至今"
+    elif p.endswith("至今") and " ~ " not in p:
+        head = p[: -len("至今")].rstrip("~ ").strip()
+        p = f"{head} ~ 至今" if head else "至今"
+    if p.startswith("~"):
+        p = "至今"
+    return p
+
+
 def _to_evidence(raw: dict[str, Any], folder: ProjectFolder, idx: int) -> Evidence:
     metrics = []
     for m in raw.get("metrics") or []:
@@ -135,7 +161,7 @@ def _to_evidence(raw: dict[str, Any], folder: ProjectFolder, idx: int) -> Eviden
         subtitle=str(raw.get("subtitle", "")).strip(),
         org=str(raw.get("org", "")).strip(),
         role=str(raw.get("role", "")).strip(),
-        period=str(raw.get("period", "")).strip(),
+        period=_normalize_period(str(raw.get("period", ""))),
         domain_tags=[str(t).strip() for t in (raw.get("domain_tags") or []) if str(t).strip()],
         skill_tags=[str(t).strip() for t in (raw.get("skill_tags") or []) if str(t).strip()],
         claim=str(raw.get("claim", "")).strip(),

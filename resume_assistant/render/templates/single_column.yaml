@@ -14,9 +14,10 @@ sections:
     title: 专业技能
     max_entries: 1
   - type: projects
-    title: 项目经历
+    title: 项目与科研经历
     max_entries: 4
     bullets_per_entry: 3
+    include_kinds: [project, course, research, activity]
   - type: honors
     title: 荣誉奖项
     max_entries: 6

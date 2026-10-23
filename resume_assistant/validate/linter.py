@@ -21,6 +21,8 @@ TECH_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#.\-]{1,20}")
 IGNORE_WORDS = {
     "gpa", "cet", "http", "https", "www", "com", "cn", "edu", "org",
     "pdf", "docx", "md", "json", "yaml", "sql", "api", "id",
+    # 度量单位与常见缩写，不属于技术栈
+    "ms", "qps", "p99", "p95", "p90", "gb", "mb", "tb", "kb",
 }
 
 
@@ -123,6 +125,8 @@ def lint(ir: ResumeIR, evidences: list[Evidence], profile: Profile) -> LintResul
                     )
 
                 # ---- 技术名词溯源（弱校验，仅提示）
+                ev = by_id.get(b.evidence_id)
+                excerpt = (ev.raw_excerpt or "").lower() if ev else ""
                 for word in TECH_RE.findall(b.text):
                     w = word.lower().strip(".-")
                     if len(w) < 2 or w in IGNORE_WORDS:
@@ -130,6 +134,9 @@ def lint(ir: ResumeIR, evidences: list[Evidence], profile: Profile) -> LintResul
                     if w in allowed_tech:
                         continue
                     if any(w in t for t in allowed_tech):
+                        continue
+                    # 词确实出现在原始资料里，说明只是没进 tags，不算编造
+                    if excerpt and w in excerpt:
                         continue
                     res.warnings.append(f"[技术词] {where}：「{word}」不在证据的 skill_tags 中，请确认")
 

@@ -90,7 +90,7 @@ def job_add(
 def job_list(kind: str = typer.Option("", "--kind", "-k")) -> None:
     """列出岗位池。"""
     for j in pipeline.list_jobs(kind or None):
-        typer.echo(f"[{j['id']}] {j['kind']:10s} {j['title']}  @{j['org']}  要求{len(j['requirements'])}条")
+        typer.echo(f"[{j['id']}] {j['kind']:10s} {j['title']}  @{j['org']}  要求{j['requirements']}条")
 
 
 # -------------------------------------------------------------------- 匹配
