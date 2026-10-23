@@ -13,11 +13,11 @@ sections:
   - type: skills
     title: 专业技能
     max_entries: 1
+  # 实习模板不区分「科研」与「项目」，所有经历统一进这一段，因此不设 include_kinds
   - type: projects
     title: 项目与科研经历
     max_entries: 4
     bullets_per_entry: 3
-    include_kinds: [project, course, research, activity]
   - type: honors
     title: 荣誉奖项
     max_entries: 6

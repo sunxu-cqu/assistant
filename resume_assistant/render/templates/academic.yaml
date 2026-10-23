@@ -22,7 +22,7 @@ sections:
     title: 项目经历
     max_entries: 3
     bullets_per_entry: 3
-    include_kinds: [project, course, activity]
+    include_kinds: [project, course, award, activity]
   - type: skills
     title: 专业技能
     max_entries: 1

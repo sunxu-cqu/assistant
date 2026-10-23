@@ -22,7 +22,10 @@ SYSTEM = """你是中文简历文案压缩器。把给定的经历素材改写�
 3. 技术名词只能来自给定的 skill_tags / domain_tags / metrics，禁止替换成没出现过的技术。
 4. 每条 ≤45 字，单行可读，不写句号。
 5. 优先把与目标岗位关键词相关的那一面写在前面。
-6. 只输出 JSON。"""
+6. 每条 bullet 必须覆盖不同的动作或结果。禁止用不同措辞复述同一件事，
+   例如「为 X 补充测试用例，覆盖率 78% 升至 84%」和「向 X 提交测试，覆盖率 78%→84%」
+   是重复的，只能保留一条。素材不够就少写，宁可 1 条也不要凑数。
+7. 只输出 JSON。"""
 
 USER_TMPL = """## 目标岗位关键词
 {keywords}
@@ -55,6 +58,51 @@ def _fmt_period(period: str) -> str:
     p = period.replace(" ~ ", " – ").replace("~", "–").strip()
     p = re.sub(r"(\d{4})[-/](\d{1,2})", r"\1.\2", p)
     return p
+
+
+def _nums(text: str) -> set[str]:
+    import re
+
+    return set(re.findall(r"\d+(?:\.\d+)?", text))
+
+
+def _similar(a: str, b: str) -> float:
+    from difflib import SequenceMatcher
+
+    return SequenceMatcher(None, a, b).ratio()
+
+
+def _info_score(b: Bullet) -> float:
+    """信息量：数字个数权重高，长度次之。"""
+    return len(_nums(b.text)) * 2.0 + len(b.text) / 50.0
+
+
+def _dedupe_bullets(bullets: list[Bullet]) -> list[Bullet]:
+    """去掉「换种说法复述同一件事」的 bullet，重复时保留信息量更大的那条。
+
+    LLM 在要求输出 N 条时，信息不足就会把同一件事拆成多条。
+    这是简历的硬伤，必须在代码层拦，不能只靠 prompt。
+    """
+    kept: list[Bullet] = []
+    for b in bullets:
+        text = b.text.strip()
+        if not text:
+            continue
+        replaced = False
+        for i, k in enumerate(kept):
+            is_dup = _similar(text, k.text) >= 0.5
+            if not is_dup:
+                # 数字高度重叠 + 文本有一定相似度，也判为重复
+                nb, nk = _nums(text), _nums(k.text)
+                is_dup = bool(nb and nk) and len(nb & nk) / max(len(nb), len(nk)) >= 0.75 and _similar(text, k.text) >= 0.3
+            if is_dup:
+                if _info_score(b) > _info_score(k):
+                    kept[i] = b
+                replaced = True
+                break
+        if not replaced:
+            kept.append(b)
+    return kept
 
 
 def _edu_section(profile: Profile, spec_title: str) -> IRSection | None:
@@ -109,12 +157,58 @@ def _honors_section(profile: Profile, spec_title: str) -> IRSection | None:
     )
 
 
-def _interest_section(profile: Profile, job: Job, spec_title: str) -> IRSection | None:
+INTEREST_SYSTEM = """你是保研套磁简历的研究兴趣撰写者。你的任务是写一段 2 句话的研究兴趣陈述。
+
+铁律：
+1. 必须围绕给定的导师研究方向来写，不能跑题到学生自己的其他方向。
+2. 只能引用给定的经历，不得编造任何项目、技术或成果。
+3. 不用「致力于」「热衷于」「浓厚的兴趣」这类空话，写具体的点。
+4. 总长不超过 110 字，写成完整的两句话，结尾加句号。
+5. 只输出 JSON。"""
+
+INTEREST_TMPL = """## 导师研究方向
+{topics}
+
+## 该生与该方向相关的经历
+{evs}
+
+## 该生的自我描述（仅作背景参考，不要照抄）
+{summary}
+
+## 输出格式
+{{"text": "两句话的研究兴趣陈述，≤110字，结尾加句号"}}"""
+
+
+def _interest_section(
+    profile: Profile,
+    job: Job,
+    spec_title: str,
+    top_evs: list[Evidence],
+    llm: DeepSeek,
+) -> IRSection | None:
     topics = job.mentor_topics or job.keywords[:4]
     if not topics:
         return None
-    body = profile.summary.strip() or "对上述方向有持续的学习与工程实践积累"
-    text = f"研究兴趣集中于{'、'.join(topics[:4])}。{body}"
+
+    ev_lines = "\n".join(f"- {e.title}：{e.claim}" for e in top_evs[:3]) or "（无直接相关经历）"
+    prompt = INTEREST_TMPL.format(
+        topics="、".join(topics[:5]),
+        evs=ev_lines,
+        summary=profile.summary.strip() or "（无）",
+    )
+    mock = {"text": f"研究兴趣集中于{'、'.join(topics[:4])}，希望结合已有工程经验继续深入"}
+    try:
+        data = llm.chat_json(INTEREST_SYSTEM, prompt, mock_payload=mock, max_tokens=400)
+    except Exception:  # noqa: BLE001
+        data = mock
+
+    text = str(data.get("text", "")).strip()
+    if len(text) > 130:
+        text = text[:130].rstrip("，、。") + "。"
+    elif text and not text.endswith(("。", ".", "！", "？")):
+        text += "。"
+    if not text:
+        return None
     return IRSection(
         type="research_interest",
         title=spec_title,
@@ -198,7 +292,8 @@ def compose(
         elif spec.type == "honors":
             sec = _honors_section(profile, spec.title)
         elif spec.type == "research_interest":
-            sec = _interest_section(profile, job, spec.title)
+            top_evs = [by_id[h.evidence_id] for h in report.hits if h.evidence_id in by_id][:3]
+            sec = _interest_section(profile, job, spec.title, top_evs, llm)
         elif spec.type in {"projects", "experience"}:
             sec = None
             pool = [
@@ -208,8 +303,9 @@ def compose(
             ]
             if spec.include_kinds is not None:
                 filtered = [e for e in pool if e.kind in spec.include_kinds]
-                # 过滤后为空则退回全池，避免整段消失
-                chosen = filtered or pool
+                # experience 语义严格：没有对应类型的经历就整段不出现，
+                # 否则会出现「科研与实习经历」里全是课程项目这种虚假陈述
+                chosen = filtered if spec.type == "experience" else (filtered or pool)
             else:
                 chosen = pool
             chosen = chosen[: spec.max_entries]
@@ -227,6 +323,7 @@ def compose(
                                 metrics=[str(m).strip() for m in (b.get("metrics") or []) if str(m).strip()],
                             )
                         )
+                    bl = _dedupe_bullets(bl)
                     heading = ev.title
                     meta = " | ".join(x for x in [ev.role, _fmt_period(ev.period), ev.org] if x)
                     entries.append(IREntry(heading=heading, meta=meta, bullets=bl))

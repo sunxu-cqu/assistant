@@ -15,7 +15,8 @@ from dataclasses import dataclass, field
 from ..models import Evidence, Profile, ResumeIR
 
 YEAR_RE = re.compile(r"^(19|20)\d{2}$")
-NUM_RE = re.compile(r"\d+(?:\.\d+)?")
+# 排除紧跟在字母后的数字：V100 / ResNet-50 / CUB-200 里的型号数字不是成果指标
+NUM_RE = re.compile(r"(?<![A-Za-z0-9])\d+(?:\.\d+)?")
 TECH_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#.\-]{1,20}")
 
 IGNORE_WORDS = {
@@ -50,6 +51,8 @@ def _allowed_numbers(evidences: list[Evidence], profile: Profile) -> set[str]:
                 allowed.add(n)
         for n in NUM_RE.findall(ev.claim + " " + ev.star.result):
             allowed.add(n)
+        # 原始资料里出现过的数字，即使没被抽进 metrics，也不算编造
+        allowed.update(ev.raw_numbers)
     for edu in profile.education:
         texts = [edu.gpa, edu.gpa_rank, edu.gpa_rank_pct, edu.period, *edu.courses, *edu.honors]
         for text in texts:
@@ -89,6 +92,8 @@ def lint(ir: ResumeIR, evidences: list[Evidence], profile: Profile) -> LintResul
         if not sec.entries:
             res.warnings.append(f"section「{sec.title}」没有条目，将被跳过")
             continue
+        # 研究兴趣是成段叙述，不按 bullet 的篇幅和标点规则约束
+        is_para = sec.type == "research_interest"
         for entry in sec.entries:
             for b in entry.bullets:
                 bullet_count += 1
@@ -102,10 +107,10 @@ def lint(ir: ResumeIR, evidences: list[Evidence], profile: Profile) -> LintResul
                     res.errors.append(f"[结构] {where}：存在空 bullet")
                     continue
 
-                if len(b.text) > 60:
+                if not is_para and len(b.text) > 60:
                     res.warnings.append(f"[篇幅] {where}：bullet 超过 60 字，建议压缩：「{b.text[:20]}…」")
 
-                if b.text.endswith(("。", ".")):
+                if not is_para and b.text.endswith(("。", ".")):
                     res.warnings.append(f"[格式] {where}：bullet 结尾不应有句号")
 
                 # ---- 第二道闸：数字溯源
@@ -125,6 +130,8 @@ def lint(ir: ResumeIR, evidences: list[Evidence], profile: Profile) -> LintResul
                     )
 
                 # ---- 技术名词溯源（弱校验，仅提示）
+                if is_para:
+                    continue
                 ev = by_id.get(b.evidence_id)
                 excerpt = (ev.raw_excerpt or "").lower() if ev else ""
                 for word in TECH_RE.findall(b.text):

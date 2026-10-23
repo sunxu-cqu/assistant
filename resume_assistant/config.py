@@ -7,7 +7,8 @@ from pathlib import Path
 
 ROOT = Path(os.environ.get("RESUME_ASSISTANT_ROOT", Path(__file__).resolve().parent.parent))
 
-DATA = ROOT / "data"
+# 数据目录可单独覆盖，便于用沙箱数据做端到端测试而不污染真实资料
+DATA = Path(os.environ.get("RESUME_ASSISTANT_DATA", ROOT / "data"))
 EVIDENCE_DIR = DATA / "evidence"
 JOBS_DIR = DATA / "jobs"
 APPS_DIR = DATA / "applications"

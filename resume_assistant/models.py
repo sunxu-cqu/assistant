@@ -112,6 +112,8 @@ class Evidence(BaseModel):
     weight: float = 0.5
     source_dir: str = ""
     raw_excerpt: str = ""
+    # 原始资料中出现过的全部数字，供校验闸门判断「是否编造」
+    raw_numbers: list[str] = Field(default_factory=list)
 
     @field_validator("weight")
     @classmethod

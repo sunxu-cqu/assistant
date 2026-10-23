@@ -214,6 +214,12 @@ draft → matched → composed → sent → screening → interview → offer
 
 加新模板只需复制一个 yaml 改字段，不用动代码。内容层（IR）与版式层完全解耦，同一份内容可渲染成多套版式。
 
+`include_kinds` 控制该 section 接收哪些类型的证据：
+
+- `single_column` 的 projects **不设** `include_kinds`，所有经历统一进这一段（实习模板不区分科研与项目）
+- `academic` 的 experience 严格限定 `[intern, research]`，**没有对应经历时整段不出现**，而不是把课程项目塞进去冒充科研经历
+- `academic` 的 projects 接收 `[project, course, award, activity]`
+
 ---
 
 ## 已知限制（P0）
@@ -238,7 +244,7 @@ draft → matched → composed → sent → screening → interview → offer
 
 ## 自测
 
-三个脚本，都不消耗 API 额度：
+五个脚本，前三个不消耗 API 额度：
 
 ```bash
 # 全链路冒烟（20 项断言：知识库→匹配→组稿→校验→渲染→状态机）
@@ -250,22 +256,34 @@ set RESUME_ASSISTANT_MOCK=1
 
 # 模板排版预览（假数据渲染两套模板，产出 data/output/_preview/*.pdf）
 ./.venv/Scripts/python.exe tests/preview_template.py
+
+# 生成刁难用的测试资料（10 个文件夹：docx/PDF/扫描件/超长/空目录/无数字）
+./.venv/Scripts/python.exe tests/make_fixtures.py
+
+# 真实 API 端到端（沙箱隔离，不碰你的真实 data/）
+./.venv/Scripts/python.exe tests/e2e_real.py
 ```
 
-`RESUME_ASSISTANT_MOCK=1` 时 LLM 调用返回占位内容，只用来验证代码路径是否通，产出的简历没有实际意义。
+`e2e_real.py` 用 `RESUME_ASSISTANT_DATA` / `RESUME_ASSISTANT_WORKSPACE` 指向 `tests/sandbox/`，跑完不会污染你的真实资料。
 
-### 当前 P0 已验证
+### 当前已验证
 
 | 项 | 状态 |
 |---|---|
 | 文件夹知识库扫描 + 指纹增量 | 通过 |
-| 证据抽取（含 metrics 出处） | 通过（mock） |
+| 多格式抽取：md / txt / docx（含表格）/ 文字层 PDF | 通过 |
+| 扫描件 PDF（无文字层）与空文件夹 | 正确跳过并报告 |
+| 超长文档截断 | 通过 |
+| 无数字资料（metrics 为空） | 通过，不报错 |
 | BM25 + 标签召回 | 通过 |
-| 模板驱动的 IR 组装 | 通过 |
+| 模板驱动的 IR 组装（含 include_kinds 选材） | 通过 |
+| bullet 重复检测与去重 | 通过 |
 | 校验闸门拦截编造数字 / 虚假 evidence_id | 通过 |
+| 数字溯源不误杀型号数字（V100）与未入 metrics 的真实数字 | 通过 |
 | Typst 渲染中文 PDF（两套模板，单页） | 通过 |
 | 双线状态机（保研 / 实习，含非法转移拒绝） | 通过 |
 | MCP stdio 握手 + 13 个工具 | 通过 |
 
-尚未用真实 API key 跑过，第一次跑请先 `kb build` 检查抽取质量。
+真实 API 端到端跑通 4 个岗位（2 实习 + 2 保研），全部 0 错误生成。
+
 

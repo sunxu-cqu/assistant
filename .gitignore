@@ -25,7 +25,13 @@ data/output/_preview/*.png
 # 通用忽略
 *.pdf
 !data/output/_preview/**/*.pdf
+!tests/sandbox/workspace/**/*.pdf
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
+
+# 端到端测试的运行时产物（fixture 资料本身要提交，保证可复现）
+tests/sandbox/data/
+tests/sandbox/*.log
+tests/sandbox/*.png

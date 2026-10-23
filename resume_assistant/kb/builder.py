@@ -127,6 +127,16 @@ def _normalize_period(raw: str) -> str:
     return p
 
 
+def _collect_numbers(text: str) -> list[str]:
+    """收集原始资料里出现过的数字，作为「非编造」的证据池。
+
+    排除紧跟在字母后的数字（V100 / ResNet-50 / CUB-200 里的型号数字），
+    这些不是可量化的成果指标。
+    """
+    nums = re.findall(r"(?<![A-Za-z0-9])\d+(?:\.\d+)?", text or "")
+    return sorted(set(nums), key=lambda x: (len(x), x))
+
+
 def _to_evidence(raw: dict[str, Any], folder: ProjectFolder, idx: int) -> Evidence:
     metrics = []
     for m in raw.get("metrics") or []:
@@ -181,6 +191,7 @@ def _to_evidence(raw: dict[str, Any], folder: ProjectFolder, idx: int) -> Eviden
         weight=float(raw.get("weight") or 0.5),
         source_dir=str(folder.path),
         raw_excerpt=folder.text[:1200],
+        raw_numbers=_collect_numbers(folder.text),
     )
 
 
