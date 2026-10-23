@@ -1,0 +1,22 @@
+key: single_column
+name: 单栏·通用实习
+description: ATS 友好，单栏无表格无图标，适合互联网/国企网申系统解析
+page:
+  margin_x: 1.6cm
+  margin_y: 1.4cm
+  font_size: 10pt
+  accent: "#1f4e79"
+sections:
+  - type: education
+    title: 教育背景
+    max_entries: 3
+  - type: skills
+    title: 专业技能
+    max_entries: 1
+  - type: projects
+    title: 项目经历
+    max_entries: 4
+    bullets_per_entry: 3
+  - type: honors
+    title: 荣誉奖项
+    max_entries: 6

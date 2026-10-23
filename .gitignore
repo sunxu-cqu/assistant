@@ -1,0 +1,31 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# 密钥与个人信息（绝不入库）
+.env
+data/profile.yaml
+
+# 运行时产物
+data/resume.db
+data/applications/*
+!data/applications/.gitkeep
+data/evidence/*
+!data/evidence/.gitkeep
+data/jobs/*
+!data/jobs/.gitkeep
+
+# 输出目录：只保留模板预览 PDF，其余忽略
+data/output/*
+!data/output/_preview/
+data/output/_preview/*.png
+
+# 通用忽略
+*.pdf
+!data/output/_preview/**/*.pdf
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

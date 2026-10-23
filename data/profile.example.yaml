@@ -1,0 +1,55 @@
+# ============================================================
+# 个人信息库 · 静态事实
+#
+# 用法：复制本文件为 data/profile.yaml 后填写自己的信息。
+#   copy data\profile.example.yaml data\profile.yaml
+# profile.yaml 已被 .gitignore 忽略，不会进版本库。
+#
+# 只放「不会因为投递对象变化」的事实。
+# 每条经历/项目不写在这里，写进 workspace/projects/<项目名>/ 文件夹。
+# ============================================================
+
+name: 张三
+gender: 男
+birth: 2003-05
+phone: 13800000000
+email: zhangsan@example.com
+city: 北京
+political: 共青团员
+homepage: ""
+
+education:
+  - school: 某某大学
+    degree: 本科
+    major: 计算机科学与技术
+    period: 2022-09 ~ 2026-06
+    gpa: 3.82/4.0
+    gpa_rank: 5/120
+    gpa_rank_pct: 4.2%
+    courses:
+      - 数据结构 95
+      - 操作系统 92
+      - 机器学习 94
+      - 数据库系统 91
+    honors:
+      - 国家奖学金（2024）
+      - 校级三好学生（2023、2024）
+
+skills:
+  languages:
+    - Python
+    - C++
+    - SQL
+  frameworks:
+    - PyTorch
+    - Spring Boot
+    - React
+  tools:
+    - Git
+    - Docker
+    - Linux
+  english: CET-6 550
+  others: []
+
+# 保研模板的「研究兴趣」段会优先用这段文字，留空则由导师方向自动生成
+summary: 关注推荐系统与图神经网络在真实业务场景下的落地，具备从数据处理到线上部署的完整工程经验。

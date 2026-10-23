@@ -1,0 +1,29 @@
+key: academic
+name: 学术·保研套磁
+description: 前置研究兴趣与科研经历，突出方法与贡献，适合联系导师
+page:
+  margin_x: 1.8cm
+  margin_y: 1.5cm
+  font_size: 10.5pt
+  accent: "#4a3b78"
+sections:
+  - type: education
+    title: 教育背景
+    max_entries: 3
+  - type: research_interest
+    title: 研究兴趣
+    max_entries: 1
+  - type: experience
+    title: 科研与实习经历
+    max_entries: 3
+    bullets_per_entry: 4
+  - type: projects
+    title: 项目经历
+    max_entries: 3
+    bullets_per_entry: 3
+  - type: skills
+    title: 专业技能
+    max_entries: 1
+  - type: honors
+    title: 荣誉奖项
+    max_entries: 6
