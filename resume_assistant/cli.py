@@ -103,6 +103,17 @@ def match_cmd(job_id: str, refresh: bool = typer.Option(False, "--refresh")) -> 
         _out(res)
         raise typer.Exit(1)
     report = res["report"]
+
+    elig = report.get("eligibility") or []
+    if elig:
+        typer.echo("\n资格校验：")
+        icon = {"fail": "✗", "warn": "!", "info": "i"}
+        for e in elig:
+            typer.echo(f"  {icon.get(e['level'], '-')} {e['requirement']}")
+            typer.echo(f"    {e['detail']}")
+        if report.get("blocked"):
+            typer.echo("\n  ⚠ 存在硬性条件不符，投递前请确认")
+
     typer.echo(f"\n匹配结果 · {len(report['hits'])} 条命中\n")
     for h in report["hits"]:
         typer.echo(f"  {h['score']:5.1f}  {h['title']}")

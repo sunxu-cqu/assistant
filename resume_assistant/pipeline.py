@@ -146,9 +146,19 @@ def run_match(job_id: str, refresh: bool = False) -> dict[str, Any]:
     if not evs:
         return {"ok": False, "error": "知识库为空，请先运行 build_knowledge_base"}
 
+    from .validate.eligibility import check as check_eligibility
+
+    elig = check_eligibility(job, load_profile())
     report = match_job(job, evs, llm=get_llm())
+    report.eligibility = elig.to_list()
+    report.blocked = elig.blocked
     db.save_match(report)
-    return {"ok": True, "cached": False, "report": report.model_dump(mode="json")}
+    return {
+        "ok": True,
+        "cached": False,
+        "blocked": report.blocked,
+        "report": report.model_dump(mode="json"),
+    }
 
 
 # --------------------------------------------------------------- 生成简历
@@ -230,6 +240,8 @@ def generate_resume(
         "match_summary": {
             "hits": [{"id": h.evidence_id, "title": h.title, "score": h.score, "reason": h.reason} for h in report.hits[:8]],
             "gaps": report.gaps,
+            "eligibility": report.eligibility,
+            "blocked": report.blocked,
         },
         "hint": None if pdf_path else "PDF 编译失败，请查看 render_error.txt，.typ 文件仍可直接编辑后手动编译",
     }

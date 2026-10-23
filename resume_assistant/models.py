@@ -285,6 +285,9 @@ class MatchReport(BaseModel):
     job_id: str
     hits: list[MatchHit] = Field(default_factory=list)
     gaps: list[str] = Field(default_factory=list)
+    # 硬性资格问题（届别/学历/专业），level=fail 表示不符合投递条件
+    eligibility: list[dict[str, Any]] = Field(default_factory=list)
+    blocked: bool = False
     generated_at: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
 

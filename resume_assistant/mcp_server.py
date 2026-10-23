@@ -123,8 +123,13 @@ def job_list(kind: str = "") -> dict:
 def job_match(job_id: str, refresh: bool = False) -> dict:
     """对指定岗位做匹配：BM25+标签召回 Top-30，再用 LLM 精排并给出理由与缺口。
 
-    返回 hits（按对口度降序，含 score/reason/matched_keywords）和 gaps
-    （岗位要求但知识库里没有对应证据的能力）。结果会缓存，refresh=True 强制重算。
+    返回三部分：
+    - hits：按对口度降序，含 score / reason / matched_keywords
+    - gaps：岗位要求但知识库里没有对应证据的能力
+    - eligibility：硬性资格校验（届别 / 学历 / 专业）。level=fail 表示不符合投递条件，
+      此时 blocked=true。这类条件用规则判定，不靠模型。
+
+    结果会缓存，refresh=True 强制重算。
     """
     return _safe(pipeline.run_match, job_id=job_id, refresh=refresh)
 

@@ -126,6 +126,31 @@ def main() -> int:
     check("拦住编造数字", any("99999" in e for e in lr.errors), str(lr.errors))
     check("拦住虚假 evidence_id", any("ev_not_exist" in e for e in lr.errors), str(lr.errors))
 
+    print("\n[9] 资格校验（届别 / 学历 / 专业）")
+    from resume_assistant.models import Education, Job, JobKind, JobRequirement, Profile
+    from resume_assistant.validate.eligibility import check as elig_check
+
+    def mk_job(reqs: list[str]) -> Job:
+        return Job(id="j", kind=JobKind.INTERNSHIP, title="t", requirements=[JobRequirement(text=t) for t in reqs])
+
+    cs = Profile(
+        name="测试",
+        education=[Education(school="X", degree="本科", major="计算机科学与技术", period="2022-09 ~ 2026-06")],
+    )
+    check("届别不符被判 fail", elig_check(mk_job(["2027届本科及以上学历"]), cs).blocked)
+    check("届别相符不报警", not elig_check(mk_job(["2026届本科及以上"]), cs).blocked)
+    check("学历不足被判 fail", elig_check(mk_job(["硕士及以上学历"]), cs).blocked)
+    check("无硬性条件不报警", not elig_check(mk_job(["熟悉Python"]), cs).issues)
+
+    mech = Profile(
+        name="测试",
+        education=[Education(school="X", degree="本科", major="机械工程", period="2022-09 ~ 2026-06")],
+    )
+    check(
+        "专业不符给 warn",
+        any(i.level == "warn" for i in elig_check(mk_job(["计算机、数学、统计等相关专业"]), mech).issues),
+    )
+
     print(f"\n{'=' * 46}")
     print(f"通过 {len(PASS)} 项，失败 {len(FAIL)} 项")
     if FAIL:

@@ -31,6 +31,7 @@ from resume_assistant.kb.builder import load_all_evidence  # noqa: E402
 JOBS = [
     ("internship", "jd_推荐算法实习生.txt", "某互联网公司", "推荐算法实习生", ""),
     ("internship", "jd_后端开发实习生.txt", "某电商公司", "后端开发实习生", ""),
+    ("internship", "jd_2027届推荐算法工程师.txt", "某短视频电商", "推荐算法工程师（实习转正）", ""),
     ("baoyan", "baoyan_张老师_图神经网络.txt", "某某大学计算机学院", "图神经网络与推荐系统", "张老师"),
     ("baoyan", "baoyan_王老师_操作系统.txt", "某某大学软件学院", "操作系统与存储系统", "王老师"),
 ]
@@ -98,6 +99,10 @@ def main() -> int:
             continue
         r = m["report"]
         print(f"\n【{title}】{time.time() - t:.1f}s | 命中 {len(r['hits'])} 条")
+        for e in r.get("eligibility") or []:
+            print(f"   [{e['level']}] {e['requirement']} — {e['detail']}")
+        if r.get("blocked"):
+            print("   ⚠ 硬性条件不符")
         for h in r["hits"]:
             print(f"   {h['score']:5.1f}  {h['title']}")
             print(f"          {h['reason'][:80]}")
