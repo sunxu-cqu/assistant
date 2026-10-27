@@ -73,6 +73,51 @@ def kb_list_evidence(limit: int = 100) -> dict:
     return _safe(_run)
 
 
+@mcp.tool()
+def kb_review() -> dict:
+    """校对知识库：用规则查出可疑项，不花 token。
+
+    查的是 LLM 抽取最容易错的那几类：
+    - kind 标错（课程大作业被标成科研经历，会直接污染保研简历的「科研经历」段）
+    - period 为空或没有年份（简历上会显示「时间未填」）
+    - 指标没有 source（数字溯源闸门将无法判断真伪）
+    - 两条证据标题高度相似（同一个项目被两个文件夹重复抽取）
+    - claim 过短、没有技能标签、没有原文摘录
+
+    同时生成卡片页 data/review.html，几十条证据一眼能扫完。
+    返回的 text 是纯文本清单，可直接读。
+    """
+    return _safe(pipeline.review_knowledge_base, write_html=True)
+
+
+@mcp.tool()
+def kb_fix(
+    evidence_id: str,
+    kind: str = "",
+    period: str = "",
+    weight: float = 0.0,
+    title: str = "",
+    role: str = "",
+    claim: str = "",
+) -> dict:
+    """就地修改一条证据的字段，只改传了的那些（空字符串视为不改）。
+
+    常见用法：kb_review 发现某条被标成 research，用 kind="course" 改回来；
+    或时间写成裸年份，用 period="2024.03 ~ 2024.06" 补全。
+    改完会重新校验一遍字段，非法 kind / 越界 weight 会直接报错。
+    """
+    return _safe(
+        pipeline.fix_evidence,
+        evidence_id,
+        kind=kind or None,
+        period=period or None,
+        weight=weight or None,
+        title=title or None,
+        role=role or None,
+        claim=claim or None,
+    )
+
+
 # -------------------------------------------------------------------- 岗位
 
 @mcp.tool()

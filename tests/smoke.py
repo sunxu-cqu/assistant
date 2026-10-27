@@ -17,6 +17,13 @@ import yaml
 os.environ["RESUME_ASSISTANT_MOCK"] = "1"
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# 沙箱隔离：这个脚本会 build_knowledge_base(force=True)，如果指向真实 data/
+# 就会用 mock 数据把用户辛苦抽出来的证据全部覆盖掉。必须隔离。
+_SANDBOX = ROOT / "tests" / "sandbox" / "smoke"
+os.environ["RESUME_ASSISTANT_DATA"] = str(_SANDBOX / "data")
+os.environ["RESUME_ASSISTANT_WORKSPACE"] = str(ROOT / "tests" / "sandbox" / "workspace")
+
 sys.path.insert(0, str(ROOT))
 
 PASS, FAIL = [], []
@@ -28,6 +35,11 @@ def check(name: str, cond: bool, detail: str = "") -> None:
 
 
 def main() -> int:
+    # 清空沙箱，保证每次从零开始，不受上次跑残留影响
+    shutil.rmtree(_SANDBOX, ignore_errors=True)
+    (_SANDBOX / "data").mkdir(parents=True, exist_ok=True)
+    shutil.copy(ROOT / "data" / "profile.example.yaml", _SANDBOX / "data" / "profile.yaml")
+
     from resume_assistant import pipeline
     from resume_assistant.kb.builder import load_all_evidence
     from resume_assistant.models import AppStatus, JobKind, can_transition
@@ -210,6 +222,54 @@ def main() -> int:
     bad = pipeline.rerender(app_id, template_key="no_such_template")
     check("模板名写错时报错", bad.get("ok") is False and "模板" in bad.get("error", ""), str(bad)[:120])
     check("投递编号写错时报错", pipeline.rerender("app_not_exist").get("ok") is False)
+
+    print("\n[12] 知识库校对")
+    from resume_assistant.kb.review import audit
+    from resume_assistant.models import Evidence, Metric
+
+    def mk_ev(**kw) -> Evidence:
+        base = dict(
+            id="ev_a",
+            kind="project",
+            title="校园二手交易平台",
+            claim="用 Spring Boot 做了个交易平台，支持商品发布与订单流转",
+            period="2024.03 ~ 2024.06",
+            raw_excerpt="校园二手交易平台，Spring Boot 后端，支持商品发布、订单流转与评价",
+        )
+        base.update(kw)
+        return Evidence(**base)
+
+    r = audit([mk_ev(period="")])
+    check("查出时间为空", any(f.field == "period" for f in r.findings))
+
+    r = audit([mk_ev(period="大三上学期")])
+    check("查出时间没有年份", any("没有年份" in f.message for f in r.findings))
+
+    r = audit([mk_ev(kind="research", title="课程大作业", raw_excerpt="这是一门课的期末大作业，做了个网站")])
+    check("查出 kind 标错（课程被标成科研）", any(f.field == "kind" for f in r.findings))
+
+    r = audit([mk_ev(kind="intern", title="后端接口开发", raw_excerpt="做了接口开发，写了文档")])
+    check("查出 kind 标错（无实习字眼）", any(f.field == "kind" for f in r.findings))
+
+    r = audit([mk_ev(id="a"), mk_ev(id="b", title="校园二手交易平台后端")])
+    check("查出疑似重复项目", any(f.field == "duplicate" for f in r.findings))
+
+    r = audit([mk_ev(metrics=[Metric(name="QPS", value="1200", unit="", source="")])])
+    check("查出指标无出处", any(f.field == "metrics" and f.level == "warn" for f in r.findings))
+
+    rv = pipeline.review_knowledge_base(write_html=True)
+    check("校对产出卡片页", rv.get("ok") is True and Path(rv["html_path"]).exists(), str(rv)[:120])
+
+    target = evs[0].id
+    fx = pipeline.fix_evidence(target, period="2024.03 ~ 2024.06")
+    check("能改单条证据的字段", fx.get("ok") is True, str(fx)[:150])
+    check(
+        "改动已落盘",
+        next(e for e in load_all_evidence() if e.id == target).period == "2024.03 ~ 2024.06",
+    )
+    bad_fix = pipeline.fix_evidence(target, kind="不存在的类型")
+    check("非法 kind 被拒绝", bad_fix.get("ok") is False, str(bad_fix)[:120])
+    check("改不存在的证据报错", pipeline.fix_evidence("ev_not_exist", period="x").get("ok") is False)
 
     print(f"\n{'=' * 46}")
     print(f"通过 {len(PASS)} 项，失败 {len(FAIL)} 项")

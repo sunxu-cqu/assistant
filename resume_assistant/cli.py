@@ -54,6 +54,48 @@ def kb_list(limit: int = 100) -> None:
             typer.echo("    指标: " + ", ".join(f"{m.name}={m.rendered()}" for m in e.metrics))
 
 
+@kb_app.command("review")
+def kb_review(
+    html: bool = typer.Option(True, "--html/--no-html", help="是否生成卡片页 data/review.html"),
+) -> None:
+    """校对抽取结果：规则查出可疑项（标错类型、时间缺失、指标无出处、重复项目）。"""
+    res = pipeline.review_knowledge_base(write_html=html)
+    if not res.get("ok"):
+        _out(res)
+        raise typer.Exit(1)
+
+    typer.echo(res["text"])
+    if res["html_path"]:
+        typer.echo(f"\n卡片页：{res['html_path']}")
+    if res["warnings"]:
+        typer.echo("\n改完重跑 kb review 确认，或 kb build --force 重抽。")
+
+
+@kb_app.command("fix")
+def kb_fix(
+    evidence_id: str,
+    kind: str = typer.Option("", "--kind", "-k", help="research / intern / project / course / award / other"),
+    period: str = typer.Option("", "--period", "-p", help="例如 2024.03 ~ 2024.06"),
+    weight: float = typer.Option(0.0, "--weight", "-w", help="0~1，越大越容易被选中"),
+    title: str = typer.Option("", "--title", "-t"),
+    role: str = typer.Option("", "--role", "-r"),
+    claim: str = typer.Option("", "--claim", "-c", help="一句话描述"),
+) -> None:
+    """就地改一条证据的字段（只改传了的那些）。"""
+    res = pipeline.fix_evidence(
+        evidence_id,
+        kind=kind or None,
+        period=period or None,
+        weight=weight or None,
+        title=title or None,
+        role=role or None,
+        claim=claim or None,
+    )
+    _out(res)
+    if not res.get("ok"):
+        raise typer.Exit(1)
+
+
 # -------------------------------------------------------------------- 岗位
 
 @job_app.command("add")

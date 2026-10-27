@@ -39,3 +39,8 @@ tests/sandbox/*.png
 # 字号自适应对比试排产物
 tests/sandbox/fit_*/
 tests/sandbox/_fit/
+
+# 知识库校对卡片页
+data/review.html
+# 冒烟测试的沙箱数据（每次重跑重建）
+tests/sandbox/smoke/

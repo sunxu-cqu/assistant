@@ -13,7 +13,7 @@ import yaml
 
 from .compose.ir import compose
 from .compose.templates import load_template, list_templates
-from .config import APPS_DIR, JOBS_DIR, OUTPUT_DIR, PROFILE_PATH, ensure_dirs
+from .config import APPS_DIR, DATA, JOBS_DIR, OUTPUT_DIR, PROFILE_PATH, ensure_dirs
 from .kb.builder import build_all, load_all_evidence
 from .llm import get_llm
 from .match.rank import match_job
@@ -42,7 +42,20 @@ def load_profile() -> Profile:
 # ------------------------------------------------------------------- 知识库
 
 def build_knowledge_base(force: bool = False) -> dict[str, Any]:
-    return build_all(force=force)
+    rep = build_all(force=force)
+    # 抽完立刻告诉你「有多少条需要人工确认」，而不是让你自己去翻 YAML
+    try:
+        from .kb.review import audit
+
+        res = audit(load_all_evidence())
+        if res.findings:
+            rep["review_hint"] = (
+                f"{res.flagged}/{res.total} 条证据有疑点，跑 `kb review` 逐条看"
+                f"（其中 {res.warnings} 个警告）"
+            )
+    except Exception:  # noqa: BLE001
+        pass
+    return rep
 
 
 def knowledge_stats() -> dict[str, Any]:
@@ -56,6 +69,31 @@ def knowledge_stats() -> dict[str, Any]:
         "total_metrics": sum(len(e.metrics) for e in evs),
         "missing_source_metrics": sum(1 for e in evs for m in e.metrics if m.source in ("", "未标注")),
     }
+
+
+def review_knowledge_base(write_html: bool = True) -> dict[str, Any]:
+    """抽取结果校对：规则检测出可疑项，可选生成卡片页方便逐条看。"""
+    from .kb.review import audit, render_html, to_text
+
+    evs = load_all_evidence()
+    if not evs:
+        return {"ok": False, "error": "知识库为空，请先跑 kb build"}
+
+    res = audit(evs)
+    out: dict[str, Any] = {"ok": True, **res.to_dict(), "text": to_text(res), "html_path": ""}
+    if write_html:
+        path = DATA / "review.html"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(render_html(res, evs, subtitle=""), encoding="utf-8")
+        out["html_path"] = str(path)
+    return out
+
+
+def fix_evidence(evidence_id: str, **fields: Any) -> dict[str, Any]:
+    """改一条证据的字段（kind / period / weight / title / role / claim）。"""
+    from .kb.builder import update_evidence
+
+    return update_evidence(evidence_id, **fields)
 
 
 # --------------------------------------------------------------------- 岗位

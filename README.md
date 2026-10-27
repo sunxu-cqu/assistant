@@ -100,7 +100,30 @@ workspace/projects/2024-某项目/
 
 第一次会把每个项目喂给 DeepSeek 抽取。之后资料没变就自动跳过（按文件指纹判断），不重复烧 token。
 
-**抽完一定要人工看一遍 `data/evidence/*.yaml`**，改掉 LLM 抽错的地方。这一步值得花时间。
+**抽完一定要校对。** 抽取是模型做的，错法就那么几种，而且都能用规则查出来：
+
+```bash
+./.venv/Scripts/python.exe -m resume_assistant.cli kb review
+```
+
+它会列出每条可疑证据和具体问题，同时生成 `data/review.html` 卡片页（几十条一眼扫完）。
+改字段不用开编辑器：
+
+```bash
+./.venv/Scripts/python.exe -m resume_assistant.cli kb fix ev_2024-xxx_00 -k course -p "2024.03 ~ 2024.06"
+```
+
+查的是这七类（纯规则，不花 token）：
+
+| 检查项 | 为什么重要 |
+|---|---|
+| `kind` 和原文对不上 | 课程大作业被标成 research，会直接污染保研简历的「科研经历」段 |
+| `period` 为空 / 没有年份 | 简历上会显示「时间未填」，或时间轴错乱 |
+| 指标没有 `source` | 数字溯源闸门无法判断它是真数据还是编的 |
+| 两条证据标题高度相似 | 同一个项目被两个文件夹重复抽取，简历上出现两条几乎一样的经历 |
+| `claim` 少于 12 字 | 信息量太低，组稿时模型只能靠编来凑 |
+| 没有 `skill_tags` | 检索只剩 BM25，召回明显变差 |
+| 没有 `raw_excerpt` | 无法核对这条是不是编的 |
 
 ### 5. 加岗位并生成简历
 
@@ -164,6 +187,8 @@ WorkBuddy 的配置文件是 `~/.workbuddy-ai/mcp.json`。写完后需要在连�
 |---|---|
 | `kb_build` | 扫描项目文件夹并抽取证据（增量） |
 | `kb_stats` / `kb_list_evidence` | 知识库概况 / 明细核对 |
+| `kb_review` | 规则校对抽取结果，出卡片页 |
+| `kb_fix` | 就地改一条证据的字段 |
 | `job_add` | 新增岗位（手动文本或 URL 抓取） |
 | `job_list` | 岗位池 |
 | `job_match` | 匹配打分 + 缺口分析 |
@@ -314,7 +339,7 @@ draft → matched → composed → sent → screening → interview → offer
 五个脚本，前三个不消耗 API 额度：
 
 ```bash
-# 全链路冒烟（35 项断言：知识库→匹配→组稿→校验→渲染→状态机→资格校验→排版自适应）
+# 全链路冒烟（46 项断言：知识库→匹配→组稿→校验→渲染→状态机→资格校验→排版自适应→校对）
 set RESUME_ASSISTANT_MOCK=1
 ./.venv/Scripts/python.exe tests/smoke.py
 
@@ -331,7 +356,8 @@ set RESUME_ASSISTANT_MOCK=1
 ./.venv/Scripts/python.exe tests/e2e_real.py
 ```
 
-`e2e_real.py` 用 `RESUME_ASSISTANT_DATA` / `RESUME_ASSISTANT_WORKSPACE` 指向 `tests/sandbox/`，跑完不会污染你的真实资料。
+`smoke.py` 与 `e2e_real.py` 都用 `RESUME_ASSISTANT_DATA` / `RESUME_ASSISTANT_WORKSPACE` 指向 `tests/sandbox/`。
+这层隔离是必须的：`smoke.py` 会 `kb build --force`，若指向真实 `data/` 就会用 mock 数据覆盖掉你辛苦抽出来的证据。
 
 ### 当前已验证
 
@@ -350,10 +376,12 @@ set RESUME_ASSISTANT_MOCK=1
 | Typst 渲染中文 PDF（两套模板，单页） | 通过 |
 | 字号自适应（页数不变前提下放大，等比推导标题） | 通过 |
 | 手改 IR 后重渲染（不调模型，校验照跑） | 通过 |
+| 知识库校对（kind 标错 / 时间缺失 / 重复项目 / 指标无出处） | 通过 |
+| 冒烟测试沙箱隔离（不写真实 data/） | 通过 |
 | 双线状态机（保研 / 实习，含非法转移拒绝） | 通过 |
 | 硬性资格校验（届别 / 学历 / 专业） | 通过 |
 | 套磁信（称呼不叠字、不虚构附件、不编造论文） | 通过 |
-| MCP stdio 握手 + 15 个工具 | 通过 |
+| MCP stdio 握手 + 17 个工具 | 通过 |
 
 真实 API 端到端跑通 5 个岗位（3 实习 + 2 保研），简历全部 0 错误生成，2 封套磁信 0 编造风险。
 

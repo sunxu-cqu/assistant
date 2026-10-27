@@ -299,6 +299,38 @@ def load_all_evidence() -> list[Evidence]:
     return out
 
 
+def update_evidence(evidence_id: str, **fields: Any) -> dict[str, Any]:
+    """就地修改一条证据的字段（人工校对后用）。
+
+    只改传进来的字段，其余原样保留。改完用 Evidence 重新校验一遍，
+    避免手抖写出非法 kind 或越界 weight——宁可在这一步报错，
+    也不要等到生成简历时才发现。
+    """
+    clean = {k: v for k, v in fields.items() if v is not None and v != ""}
+    if not clean:
+        return {"ok": False, "error": "没有要修改的字段"}
+
+    for path in sorted(EVIDENCE_DIR.glob("*.yaml")):
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception:  # noqa: BLE001
+            continue
+        items = data.get("items") or []
+        for i, item in enumerate(items):
+            if item.get("id") != evidence_id:
+                continue
+            try:
+                ev = Evidence(**{**item, **clean})
+            except Exception as exc:  # noqa: BLE001
+                return {"ok": False, "error": f"字段非法：{exc}"}
+            items[i] = ev.model_dump(mode="json")
+            data["items"] = items
+            path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            return {"ok": True, "path": str(path), "changed": sorted(clean), "evidence": items[i]}
+
+    return {"ok": False, "error": f"找不到证据：{evidence_id}"}
+
+
 def save_evidence(ev: Evidence) -> Path:
     """单条覆盖保存（人工编辑后用）。"""
     slug = slugify(ev.source_dir.rsplit("\\", 1)[-1].rsplit("/", 1)[-1], 24) or "misc"
