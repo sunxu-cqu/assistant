@@ -320,6 +320,28 @@ def main() -> int:
     check("README 优先读取（截断时不会先砍掉它）", of.files[0] == "README.md", str(of.files))
     shutil.rmtree(order_dir.parent, ignore_errors=True)
 
+    print("\n[15] 幽灵证据（文件夹改名/删除后遗留）")
+    from resume_assistant.config import EVIDENCE_DIR
+
+    ghost = EVIDENCE_DIR / "_ghost_test.yaml"
+    ghost.write_text(
+        yaml.safe_dump(
+            {
+                "_source": {"folder": "早就删掉的项目"},
+                "items": [{"id": "ev_ghost", "title": "幽灵项目", "kind": "project", "claim": "这条不该存在"}],
+            },
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+    found = pipeline.find_orphan_evidence()
+    check("能发现幽灵证据", any(o["folder"] == "早就删掉的项目" for o in found["items"]), str(found)[:150])
+    check("幽灵证据不参与检索前的清理提示", found["hint"] is not None)
+
+    pruned = pipeline.prune_orphan_evidence()
+    check("prune 删除幽灵证据", pruned["count"] >= 1 and not ghost.exists(), str(pruned)[:120])
+    check("清理后不再报告", not any(o["folder"] == "早就删掉的项目" for o in pipeline.find_orphan_evidence()["items"]))
+
     print(f"\n{'=' * 46}")
     print(f"通过 {len(PASS)} 项，失败 {len(FAIL)} 项")
     if FAIL:

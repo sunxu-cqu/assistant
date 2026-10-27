@@ -97,6 +97,26 @@ def kb_scan(verbose: bool = typer.Option(False, "--verbose", "-v", help="列出�
         typer.echo("  这些文件夹不会消耗 token，但也不会有任何证据。")
 
 
+@kb_app.command("prune")
+def kb_prune(yes: bool = typer.Option(False, "--yes", "-y", help="确认删除")) -> None:
+    """清理来源文件夹已不存在的证据（文件夹改名/删除后遗留的幽灵证据）。"""
+    res = pipeline.find_orphan_evidence()
+    if not res["count"]:
+        typer.echo("没有需要清理的证据。")
+        return
+
+    typer.echo(f"发现 {res['count']} 个幽灵证据文件（来源文件夹已不存在）：")
+    for o in res["items"]:
+        typer.echo(f"  {o['folder']}  ({o['count']} 条)")
+    typer.echo("\n它们仍会参与检索，简历上可能冒出你早已删掉的项目。")
+
+    if not yes:
+        typer.echo("确认删除请加 -y：kb prune -y")
+        return
+    out = pipeline.prune_orphan_evidence()
+    typer.echo(f"已删除 {out['count']} 个证据文件。")
+
+
 @kb_app.command("stats")
 def kb_stats() -> None:
     """知识库概况。"""

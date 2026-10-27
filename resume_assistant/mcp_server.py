@@ -39,6 +39,21 @@ def kb_build(force: bool = False) -> dict:
 
 
 @mcp.tool()
+def kb_prune(confirm: bool = False) -> dict:
+    """清理「来源文件夹已不存在」的幽灵证据。
+
+    改个文件夹名字，旧证据不会自动消失——它还在知识库里参与检索，
+    简历上会冒出一条你早就删掉的项目。这个工具比对 _source.folder 和
+    当前实际文件夹，把对不上的列出来。
+
+    confirm=false 时只列出不删除，看清楚再传 confirm=true。
+    """
+    if not confirm:
+        return _safe(pipeline.find_orphan_evidence)
+    return _safe(pipeline.prune_orphan_evidence)
+
+
+@mcp.tool()
 def kb_stats() -> dict:
     """返回知识库概况：证据条数、按类型分布、指标总数、以及缺少出处的指标数（应为 0）。"""
     return _safe(pipeline.knowledge_stats)

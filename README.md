@@ -246,6 +246,7 @@ WorkBuddy 的配置文件是 `~/.workbuddy-ai/mcp.json`。写完后需要在连�
 | `kb_stats` / `kb_list_evidence` | 知识库概况 / 明细核对 |
 | `kb_review` | 规则校对抽取结果，出卡片页 |
 | `kb_fix` | 就地改一条证据的字段 |
+| `kb_prune` | 清理文件夹改名/删除后遗留的幽灵证据 |
 | `job_add` | 新增岗位（手动文本或 URL 抓取） |
 | `job_list` | 岗位池 |
 | `job_match` | 匹配打分 + 缺口分析 |
@@ -397,7 +398,7 @@ draft → matched → composed → sent → screening → interview → offer
 五个脚本，前三个不消耗 API 额度：
 
 ```bash
-# 全链路冒烟（63 项断言：资料接入→知识库→匹配→组稿→校验→渲染→状态机→校对）
+# 全链路冒烟（67 项断言：资料接入→知识库→匹配→组稿→校验→渲染→状态机→校对）
 set RESUME_ASSISTANT_MOCK=1
 ./.venv/Scripts/python.exe tests/smoke.py
 
@@ -439,11 +440,12 @@ set RESUME_ASSISTANT_MOCK=1
 | 读不出的文件带原因上报（.doc / 扫描件 / 截图），锁文件静默忽略 | 通过 |
 | 并发抽取（3 线程，索引不互相覆盖） | 通过 |
 | 环境自检（依赖 / 示例 profile / 中文字体） | 通过 |
+| 幽灵证据检测与清理（文件夹改名后不留残影） | 通过 |
 | 冒烟测试沙箱隔离（不写真实 data/） | 通过 |
 | 双线状态机（保研 / 实习，含非法转移拒绝） | 通过 |
 | 硬性资格校验（届别 / 学历 / 专业） | 通过 |
 | 套磁信（称呼不叠字、不虚构附件、不编造论文） | 通过 |
-| MCP stdio 握手 + 19 个工具 | 通过 |
+| MCP stdio 握手 + 20 个工具 | 通过 |
 
 真实 API 端到端跑通 5 个岗位（3 实习 + 2 保研），简历全部 0 错误生成，2 封套磁信 0 编造风险。
 

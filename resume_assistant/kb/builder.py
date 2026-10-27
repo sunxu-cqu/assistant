@@ -282,6 +282,56 @@ def build_one(folder: ProjectFolder, llm: DeepSeek | None = None, force: bool = 
     return items, False
 
 
+def find_orphans() -> list[dict[str, Any]]:
+    """找出「来源文件夹已经不在了」的证据文件。
+
+    改个文件夹名字，旧证据不会自动消失——它还在知识库里参与检索，
+    简历上会冒出一条你早就删掉的项目。这类幽灵证据只能靠比对
+    `_source.folder` 和当前实际文件夹来发现。
+    """
+    from .scanner import scan_all
+
+    alive = {f.name for f in scan_all()}
+    out: list[dict[str, Any]] = []
+    for path in sorted(EVIDENCE_DIR.glob("*.yaml")):
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception:  # noqa: BLE001
+            continue
+        src = (data.get("_source") or {}).get("folder")
+        if src and src not in alive:
+            out.append(
+                {
+                    "file": path.name,
+                    "folder": src,
+                    "count": len(data.get("items") or []),
+                    "ids": [i.get("id", "") for i in (data.get("items") or [])],
+                }
+            )
+    return out
+
+
+def prune_orphans() -> dict[str, Any]:
+    """删掉幽灵证据文件，并从索引里清掉对应条目。"""
+    orphans = find_orphans()
+    if not orphans:
+        return {"ok": True, "removed": [], "count": 0}
+
+    index = _load_index()
+    removed: list[str] = []
+    for o in orphans:
+        path = EVIDENCE_DIR / o["file"]
+        try:
+            path.unlink()
+        except OSError:
+            continue
+        index.pop(o["folder"], None)
+        removed.append(o["folder"])
+    with _INDEX_LOCK:
+        _save_index(index)
+    return {"ok": True, "removed": removed, "count": len(removed)}
+
+
 def build_all(
     force: bool = False,
     llm: DeepSeek | None = None,
@@ -315,6 +365,12 @@ def build_all(
     workers = max(1, min(workers, 6))
     total = len(todo)
     done = 0
+
+    orphans = find_orphans()
+    if orphans:
+        report["orphaned"] = [
+            {"folder": o["folder"], "file": o["file"], "count": o["count"]} for o in orphans
+        ]
 
     def _run(folder: ProjectFolder) -> tuple[ProjectFolder, list[Evidence], bool]:
         return (folder, *build_one(folder, llm=llm, force=force))

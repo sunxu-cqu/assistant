@@ -137,6 +137,25 @@ def fix_evidence(evidence_id: str, **fields: Any) -> dict[str, Any]:
     return update_evidence(evidence_id, **fields)
 
 
+def find_orphan_evidence() -> dict[str, Any]:
+    """列出「来源文件夹已不存在」的证据文件。"""
+    from .kb.builder import find_orphans
+
+    items = find_orphans()
+    return {
+        "ok": True,
+        "count": len(items),
+        "items": items,
+        "hint": "文件夹改名或删除后遗留的幽灵证据，跑 kb prune -y 清掉" if items else None,
+    }
+
+
+def prune_orphan_evidence() -> dict[str, Any]:
+    from .kb.builder import prune_orphans
+
+    return prune_orphans()
+
+
 # --------------------------------------------------------------------- 岗位
 
 def add_job(
