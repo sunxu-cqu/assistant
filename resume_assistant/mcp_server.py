@@ -156,6 +156,19 @@ def resume_preview(job_id: str, template: str = "single_column") -> dict:
 
 
 @mcp.tool()
+def resume_rerender(app_id: str, template: str = "") -> dict:
+    """手改 data/output/<app_id>/ir.yaml 之后，重新校验并重新渲染 PDF。
+
+    不调用模型、不重排内容，只重新排版。适合「生成完想改一两句话」的场景：
+    直接编辑 ir.yaml（措辞、删条目、调顺序），再调这个工具出新的 PDF。
+
+    template 留空则沿用 IR 里记录的模板；传模板名可顺手换版式。
+    注意：校验有错也会照常渲染，errors 会原样返回，发出去前请先处理。
+    """
+    return _safe(pipeline.rerender, app_id=app_id, template_key=template)
+
+
+@mcp.tool()
 def cover_letter_generate(job_id: str) -> dict:
     """为保研岗位生成套磁邮件（主题 + 正文），写入 data/output/<app_id>/cover_letter.md。
 

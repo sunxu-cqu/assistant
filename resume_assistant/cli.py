@@ -145,6 +145,24 @@ def gen_cmd(
     typer.echo(f"源码：{res['typ_path']}")
 
 
+@app.command("rerender")
+def rerender_cmd(
+    app_id: str,
+    template: str = typer.Option("", "--template", "-T", help="换模板；留空则沿用 IR 里记录的模板"),
+) -> None:
+    """手改 data/output/<app_id>/ir.yaml 后重新出 PDF（不调模型）。"""
+    res = pipeline.rerender(app_id, template_key=template)
+    if not res.get("ok"):
+        _out(res)
+        raise typer.Exit(1)
+    lint = res["lint"]
+    typer.echo(f"模板：{res['template']}")
+    typer.echo(f"校验：{lint['stats']['bullets']} 条 bullet，{lint['stats']['errors']} 错误，{lint['stats']['warnings']} 提示")
+    for w in (lint["errors"] + lint["warnings"])[:10]:
+        typer.echo(f"  ! {w}")
+    typer.echo(f"PDF：{res['pdf_path']}")
+
+
 @app.command("templates")
 def templates_cmd() -> None:
     """列出模板。"""

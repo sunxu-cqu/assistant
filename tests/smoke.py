@@ -12,6 +12,8 @@ import shutil
 import sys
 from pathlib import Path
 
+import yaml
+
 os.environ["RESUME_ASSISTANT_MOCK"] = "1"
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -188,6 +190,26 @@ def main() -> int:
     check("试排中间产物已清理", not list(out.glob("_fit*")))
     check("自适应关闭时用模板原字号", "size: %gpt" % base_pt in build_source(tiny, tmpl))
     shutil.rmtree(out, ignore_errors=True)
+
+    print("\n[11] 手改 IR 后重渲染")
+    from resume_assistant.config import OUTPUT_DIR
+
+    ir_file = OUTPUT_DIR / app_id / "ir.yaml"
+    raw_ir = yaml.safe_load(ir_file.read_text(encoding="utf-8"))
+    sec = next(s for s in raw_ir["sections"] if s["entries"] and s["entries"][0].get("bullets"))
+    sec["entries"][0]["bullets"][0]["text"] = "手工改写的这一句"
+    ir_file.write_text(yaml.safe_dump(raw_ir, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+    rr = pipeline.rerender(app_id)
+    check("重渲染成功", rr.get("ok") is True, str(rr)[:200])
+    typ_text = Path(rr["typ_path"]).read_text(encoding="utf-8")
+    check("手改内容进入 PDF 源码", "手工改写的这一句" in typ_text)
+    check("重渲染不调模型（bullet 数不变）", rr["lint"]["stats"]["bullets"] == len(
+        [b for s in raw_ir["sections"] for e in s["entries"] for b in (e.get("bullets") or [])]
+    ))
+    bad = pipeline.rerender(app_id, template_key="no_such_template")
+    check("模板名写错时报错", bad.get("ok") is False and "模板" in bad.get("error", ""), str(bad)[:120])
+    check("投递编号写错时报错", pipeline.rerender("app_not_exist").get("ok") is False)
 
     print(f"\n{'=' * 46}")
     print(f"通过 {len(PASS)} 项，失败 {len(FAIL)} 项")

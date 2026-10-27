@@ -122,6 +122,18 @@ workspace/projects/2024-某项目/
 
 产物：`data/output/<app_id>/resume.pdf`（另有 `ir.yaml` 和 `resume.typ`，都可手改后重新编译）。
 
+### 6. 改一两句话再出 PDF
+
+生成的措辞不可能句句合意。`ir.yaml` 就是给你改的——删条目、调顺序、换说法都行，改完不用重新调模型：
+
+```bash
+./.venv/Scripts/python.exe -m resume_assistant.cli rerender app_xxx
+./.venv/Scripts/python.exe -m resume_assistant.cli rerender app_xxx -T academic   # 顺手换个版式
+```
+
+`rerender` 只做「重新校验 + 重新排版」，不花 token。校验有错也照常出 PDF——
+你是主动改的，应该立刻看见结果，而不是被闸门挡住；错误会原样打印出来提醒你处理。
+
 ---
 
 ## 接入 MCP
@@ -157,6 +169,7 @@ WorkBuddy 的配置文件是 `~/.workbuddy-ai/mcp.json`。写完后需要在连�
 | `job_match` | 匹配打分 + 缺口分析 |
 | `resume_generate` | 生成 PDF（含校验闸门） |
 | `resume_preview` | 只出 IR 不渲染，快速看结构 |
+| `resume_rerender` | 手改 ir.yaml 后重新出 PDF（不调模型） |
 | `cover_letter_generate` | 保研套磁信（Markdown，仅 baoyan 岗位） |
 | `template_list` | 模板列表 |
 | `app_list` / `app_detail` / `app_advance` | 投递记录与状态机 |
@@ -301,7 +314,7 @@ draft → matched → composed → sent → screening → interview → offer
 五个脚本，前三个不消耗 API 额度：
 
 ```bash
-# 全链路冒烟（30 项断言：知识库→匹配→组稿→校验→渲染→状态机→资格校验→排版自适应）
+# 全链路冒烟（35 项断言：知识库→匹配→组稿→校验→渲染→状态机→资格校验→排版自适应）
 set RESUME_ASSISTANT_MOCK=1
 ./.venv/Scripts/python.exe tests/smoke.py
 
@@ -336,10 +349,11 @@ set RESUME_ASSISTANT_MOCK=1
 | 数字溯源不误杀型号数字（V100）与未入 metrics 的真实数字 | 通过 |
 | Typst 渲染中文 PDF（两套模板，单页） | 通过 |
 | 字号自适应（页数不变前提下放大，等比推导标题） | 通过 |
+| 手改 IR 后重渲染（不调模型，校验照跑） | 通过 |
 | 双线状态机（保研 / 实习，含非法转移拒绝） | 通过 |
 | 硬性资格校验（届别 / 学历 / 专业） | 通过 |
 | 套磁信（称呼不叠字、不虚构附件、不编造论文） | 通过 |
-| MCP stdio 握手 + 14 个工具 | 通过 |
+| MCP stdio 握手 + 15 个工具 | 通过 |
 
 真实 API 端到端跑通 5 个岗位（3 实习 + 2 保研），简历全部 0 错误生成，2 封套磁信 0 编造风险。
 

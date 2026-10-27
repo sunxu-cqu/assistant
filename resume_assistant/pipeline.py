@@ -168,6 +168,68 @@ def _write_ir(ir: ResumeIR, path: Path) -> None:
     path.write_text(yaml.safe_dump(ir.model_dump(mode="json"), allow_unicode=True, sort_keys=False), encoding="utf-8")
 
 
+def _read_ir(path: Path) -> ResumeIR:
+    return ResumeIR(**(yaml.safe_load(path.read_text(encoding="utf-8")) or {}))
+
+
+def rerender(app_id: str, template_key: str = "") -> dict[str, Any]:
+    """用磁盘上的 ir.yaml 重新渲染 PDF（手改 IR 之后用）。
+
+    这是「生成 → 手改 → 重渲染」闭环的最后一环：`gen` 把 IR 写成可读的 yaml，
+    你可以改措辞、删掉不想放的条目、调整顺序，改完跑这个命令出 PDF。
+
+    与 `gen` 的区别：不调模型、不重排内容，只重新校验 + 重新排版。
+    校验有错也照常渲染——你是主动改的，应该立刻看见结果，而不是被闸门挡住。
+    """
+    app = db.get_application(app_id)
+    if app is None:
+        return {"ok": False, "stage": "load", "error": f"投递记录不存在：{app_id}"}
+
+    out_dir = OUTPUT_DIR / app.id
+    ir_path = out_dir / "ir.yaml"
+    if not ir_path.exists():
+        return {"ok": False, "stage": "load", "error": f"找不到 {ir_path}，请先跑 gen 生成"}
+
+    try:
+        ir = _read_ir(ir_path)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "stage": "parse", "error": f"ir.yaml 解析失败：{exc}"}
+
+    key = template_key or ir.template or "single_column"
+    try:
+        template = load_template(key)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "stage": "template", "error": f"模板不存在：{key}（{exc}）"}
+
+    evs = load_all_evidence()
+    profile = load_profile()
+    result = lint(ir, evs, profile)
+
+    typ_path, pdf_path = render_pdf(ir, template, out_dir)
+    if template_key:
+        ir.template = template.key
+        _write_ir(ir, ir_path)  # 换了模板就写回，避免下次又不一致
+
+    db.set_snapshot(
+        app.id,
+        Snapshot(
+            jd_path=str(JOBS_DIR / f"{app.job_id}.yaml"),
+            ir_path=str(ir_path),
+            pdf_path=str(pdf_path) if pdf_path else "",
+        ),
+    )
+
+    return {
+        "ok": pdf_path is not None,
+        "application_id": app.id,
+        "template": template.key,
+        "typ_path": str(typ_path),
+        "pdf_path": str(pdf_path) if pdf_path else "",
+        "lint": result.to_dict(),
+        "hint": None if result.ok else "校验未通过但已渲染；这些是编造风险，发出去前务必处理",
+    }
+
+
 def generate_resume(
     job_id: str,
     template_key: str = "single_column",
