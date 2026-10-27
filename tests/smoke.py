@@ -271,6 +271,43 @@ def main() -> int:
     check("非法 kind 被拒绝", bad_fix.get("ok") is False, str(bad_fix)[:120])
     check("改不存在的证据报错", pipeline.fix_evidence("ev_not_exist", period="x").get("ok") is False)
 
+    print("\n[14] 资料接入（编码 / 格式 / 跳过原因）")
+    import codecs
+
+    from resume_assistant.kb.scanner import decode_bytes, scan_folder
+
+    check("GBK 能正确解码", decode_bytes("准确率 92%".encode("gb18030"))[0] == "准确率 92%")
+    check("UTF-8 BOM 能正确解码", decode_bytes(codecs.BOM_UTF8 + "中文".encode())[0] == "中文")
+    check("UTF-16 能正确解码", decode_bytes("中文".encode("utf-16"))[0] == "中文")
+
+    dirty = ROOT / "tests" / "sandbox" / "workspace" / "projects" / "2026-脏资料测试"
+    pf = scan_folder(dirty)
+    check("GBK txt 读成正常中文", "编译原理" in pf.text)
+    check("pptx 能读到正文", "74.5%" in pf.text)
+    check("xlsx 能读到表格", "0.745" in pf.text)
+    reasons = {s["file"]: s["reason"] for s in pf.skipped}
+    check(
+        "老版 .doc 给出可操作的原因",
+        any(".doc" in f and ".docx" in r for f, r in reasons.items()),
+        str(reasons),
+    )
+    check("截图给出 OCR 提示", any("OCR" in r for r in reasons.values()), str(reasons))
+    check("Office 锁文件被静默忽略", not any("~$" in f for f in reasons), str(reasons))
+
+    sr = pipeline.scan_report()
+    check("扫描报告可用", sr["ok"] is True and sr["folders"] >= 10, str(sr.get("folders")))
+    check("列出读不到文字的文件夹", "2026-空文件夹测试" in sr["no_text"], str(sr["no_text"]))
+
+    order_dir = ROOT / "tests" / "sandbox" / "_order" / "proj"
+    shutil.rmtree(order_dir.parent, ignore_errors=True)
+    order_dir.mkdir(parents=True)
+    (order_dir / "README.md").write_text("# 项目说明\n做了个东西，效果不错。", encoding="utf-8")
+    (order_dir / "a_main.cpp").write_text("int main(){}", encoding="utf-8")
+    (order_dir / "b_util.py").write_text("print(1)", encoding="utf-8")
+    of = scan_folder(order_dir)
+    check("README 优先读取（截断时不会先砍掉它）", of.files[0] == "README.md", str(of.files))
+    shutil.rmtree(order_dir.parent, ignore_errors=True)
+
     print(f"\n{'=' * 46}")
     print(f"通过 {len(PASS)} 项，失败 {len(FAIL)} 项")
     if FAIL:

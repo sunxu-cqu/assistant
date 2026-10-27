@@ -70,6 +70,64 @@ def _scanned_pdf(name: str, filename: str) -> None:
     img.save(str(d / filename), "PDF", resolution=150.0)
 
 
+def _dirty_folder(name: str) -> None:
+    """模拟真实资料里最脏的那一类文件夹。
+
+    中文 Windows 上导出的 txt 多半是 GBK；课程资料常见 pptx / xlsx；
+    有人会把 .doc 直接改后缀；还有一堆截图和 Office 临时锁文件。
+    """
+    d = PROJ / name
+    d.mkdir(parents=True, exist_ok=True)
+
+    # GBK 编码的 txt —— 按 utf-8 读会整篇变乱码
+    (d / "GBK笔记.txt").write_bytes(
+        "编译原理课程设计：实现了一个 C 语言子集的词法分析与递归下降语法分析器，"
+        "支持 47 个文法规则，错误恢复成功率达到 92%，处理 1200 行测试代码耗时 0.8 秒。"
+        .encode("gb18030")
+    )
+
+    # pptx —— 答辩 PPT 里的核心结论
+    from pptx import Presentation
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[1])
+    slide.shapes.title.text = "毕业设计答辩：基于知识图谱的课程推荐"
+    slide.placeholders[1].text = (
+        "构建 3200 个实体、1.8 万条关系的课程知识图谱\n"
+        "推荐准确率从 61.2% 提升到 74.5%\n"
+        "冷启动用户覆盖率提升 23 个百分点"
+    )
+    slide2 = prs.slides.add_slide(prs.slide_layouts[1])
+    slide2.shapes.title.text = "技术栈"
+    slide2.placeholders[1].text = "Neo4j, Python, PyTorch, TransE"
+    prs.save(str(d / "答辩.pptx"))
+
+    # xlsx —— 实验数据表
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "实验结果"
+    for row in [
+        ["模型", "准确率", "召回率"],
+        ["基线", "0.612", "0.548"],
+        ["本文方法", "0.745", "0.681"],
+    ]:
+        ws.append(row)
+    wb.save(str(d / "实验数据.xlsx"))
+
+    # 老版 .doc —— python-docx 打不开，必须给出明确原因
+    (d / "旧版报告.doc").write_bytes(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 512)
+
+    # 截图 —— 没有文字层
+    from PIL import Image
+
+    Image.new("RGB", (800, 600), "white").save(str(d / "界面截图.png"))
+
+    # Office 临时锁文件 —— 应静默忽略，不该报成「读不出来」
+    (d / "~$答辩.pptx").write_bytes(b"lock")
+
+
 def main() -> int:
     if PROJ.exists():
         shutil.rmtree(PROJ)
@@ -219,6 +277,9 @@ Python, PyTorch, torchvision, NumPy
 
     # 10 空文件夹 —— 应被报为 empty
     (PROJ / "2026-空文件夹测试").mkdir(parents=True, exist_ok=True)
+
+    # 11 脏资料：GBK 编码 / pptx / xlsx / 老版 doc / 截图 / 临时锁文件
+    _dirty_folder("2026-脏资料测试")
 
     print(f"生成完成：{PROJ}")
     for d in sorted(PROJ.iterdir()):

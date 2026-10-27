@@ -74,6 +74,20 @@ def kb_list_evidence(limit: int = 100) -> dict:
 
 
 @mcp.tool()
+def kb_scan() -> dict:
+    """只扫描不抽取：每个文件夹读到了多少字、哪些文件读不出来。
+
+    抽取 20 个文件夹要几分钟和不少 token，扫一遍只要几秒。
+    真实资料里总有几份老版 .doc、扫描件 PDF 或截图是读不出文字的，
+    先看这份清单再决定抽不抽，比抽完对着「证据不对」发懵强。
+
+    items[].skipped 里每个文件都带 reason，例如「老版 .doc 打不开，
+    请用 Word 另存为 .docx」或「PDF 没有文字层，P0 不支持 OCR」。
+    """
+    return _safe(pipeline.scan_report)
+
+
+@mcp.tool()
 def kb_review() -> dict:
     """校对知识库：用规则查出可疑项，不花 token。
 

@@ -88,9 +88,39 @@ workspace/projects/2024-某项目/
 └── 其他资料.docx
 ```
 
-支持 `.md .txt .pdf .docx .csv .json .yaml`。PDF 建议放文字版，扫描件 P0 不支持 OCR。
+支持格式：`.md .txt .pdf .docx .pptx .xlsx .csv .json .yaml`
 
-### 4. 构建知识库
+两个容易踩的坑，已经处理好了：
+
+- **GBK 编码的 txt/csv**：中文 Windows 导出的文本基本都是 GBK，按 utf-8 读会静默变乱码。现在按 BOM → utf-8 → gb18030 → big5 依次试，读不出来会明确报错而不是塞一堆乱码给模型。
+- **读不出来的文件会被列出来，而不是悄悄跳过**：老版 `.doc`（请另存为 docx）、扫描件 PDF、截图（都没有文字层）、压缩包。跑 `kb scan` 就能看到每个文件的状态和原因。
+
+### 4. 先扫一遍，再决定抽不抽
+
+```bash
+./.venv/Scripts/python.exe -m resume_assistant.cli kb scan
+./.venv/Scripts/python.exe -m resume_assistant.cli kb scan -v    # 列出每个文件
+```
+
+```
+文件夹                               文件      字符   状态
+────────────────────────────────────────────────────────────────────
+2024-校园二手交易平台                      2    8421   待抽取
+2026-脏资料测试                         3     366   待抽取
+2026-扫描件测试                         0       0   读不到任何文字
+
+读不出来的文件（3 个）：
+  ✗ 2026-扫描件测试/扫描版证书.pdf
+      PDF 没有文字层（扫描件/图片版），P0 不支持 OCR
+  ✗ 2026-脏资料测试/旧版报告.doc
+      老版 .doc 打不开，请用 Word 另存为 .docx 后重试
+  ✗ 2026-脏资料测试/界面截图.png
+      图片没有文字层，P0 不支持 OCR（重要内容请手动写进 md）
+```
+
+扫描不花 token。**先看这一步，比抽完对着「证据不对」发懵强。**
+
+### 5. 构建知识库
 
 ```bash
 ./.venv/Scripts/python.exe -m resume_assistant.cli kb build
@@ -98,7 +128,8 @@ workspace/projects/2024-某项目/
 ./.venv/Scripts/python.exe -m resume_assistant.cli kb list
 ```
 
-第一次会把每个项目喂给 DeepSeek 抽取。之后资料没变就自动跳过（按文件指纹判断），不重复烧 token。
+每个文件夹一次模型调用，默认 3 个并发（`-j 1` 改串行）。资料没变就按文件指纹跳过，不重复烧 token。
+一个字都没读到的文件夹不会送去抽取——省 token，也会在报告里单列出来。
 
 **抽完一定要校对。** 抽取是模型做的，错法就那么几种，而且都能用规则查出来：
 
@@ -125,7 +156,7 @@ workspace/projects/2024-某项目/
 | 没有 `skill_tags` | 检索只剩 BM25，召回明显变差 |
 | 没有 `raw_excerpt` | 无法核对这条是不是编的 |
 
-### 5. 加岗位并生成简历
+### 6. 加岗位并生成简历
 
 ```bash
 # 手动粘贴（推荐）
@@ -145,7 +176,7 @@ workspace/projects/2024-某项目/
 
 产物：`data/output/<app_id>/resume.pdf`（另有 `ir.yaml` 和 `resume.typ`，都可手改后重新编译）。
 
-### 6. 改一两句话再出 PDF
+### 7. 改一两句话再出 PDF
 
 生成的措辞不可能句句合意。`ir.yaml` 就是给你改的——删条目、调顺序、换说法都行，改完不用重新调模型：
 
@@ -186,6 +217,7 @@ WorkBuddy 的配置文件是 `~/.workbuddy-ai/mcp.json`。写完后需要在连�
 | 工具 | 用途 |
 |---|---|
 | `kb_build` | 扫描项目文件夹并抽取证据（增量） |
+| `kb_scan` | 只扫描不抽取，看每个文件夹读到了什么 |
 | `kb_stats` / `kb_list_evidence` | 知识库概况 / 明细核对 |
 | `kb_review` | 规则校对抽取结果，出卡片页 |
 | `kb_fix` | 就地改一条证据的字段 |
@@ -319,7 +351,8 @@ draft → matched → composed → sent → screening → interview → offer
 | 限制 | 说明 | 后续 |
 |---|---|---|
 | 无向量检索 | 只有 BM25 + 标签重叠，语义召回弱 | P1 接 bge-m3（接口已留 `encode_fn`） |
-| 无 OCR | 扫描版 PDF / 图片资料读不到 | P1 接 PaddleOCR |
+| 无 OCR | 扫描版 PDF / 截图读不到，`kb scan` 会明确列出 | P1 接 PaddleOCR |
+| 老版 Office | `.doc` / `.xls` / `.ppt` 打不开，需另存为新格式（会提示） | 不打算支持，二进制格式太脆 |
 | 抓取能力弱 | JS 渲染页取不到正文，会引导改手动粘贴 | 视需要接 Playwright |
 | 无 VSCode UI | 目前只有 CLI + MCP | P2 做 Webview 看板 + diff 确认 |
 | 单语言 | 只支持中文 | — |
@@ -339,7 +372,7 @@ draft → matched → composed → sent → screening → interview → offer
 五个脚本，前三个不消耗 API 额度：
 
 ```bash
-# 全链路冒烟（46 项断言：知识库→匹配→组稿→校验→渲染→状态机→资格校验→排版自适应→校对）
+# 全链路冒烟（58 项断言：资料接入→知识库→匹配→组稿→校验→渲染→状态机→校对）
 set RESUME_ASSISTANT_MOCK=1
 ./.venv/Scripts/python.exe tests/smoke.py
 
@@ -377,11 +410,14 @@ set RESUME_ASSISTANT_MOCK=1
 | 字号自适应（页数不变前提下放大，等比推导标题） | 通过 |
 | 手改 IR 后重渲染（不调模型，校验照跑） | 通过 |
 | 知识库校对（kind 标错 / 时间缺失 / 重复项目 / 指标无出处） | 通过 |
+| 资料接入：GBK / UTF-16 / BOM 解码，pptx / xlsx 抽取 | 通过 |
+| 读不出的文件带原因上报（.doc / 扫描件 / 截图），锁文件静默忽略 | 通过 |
+| 并发抽取（3 线程，索引不互相覆盖） | 通过 |
 | 冒烟测试沙箱隔离（不写真实 data/） | 通过 |
 | 双线状态机（保研 / 实习，含非法转移拒绝） | 通过 |
 | 硬性资格校验（届别 / 学历 / 专业） | 通过 |
 | 套磁信（称呼不叠字、不虚构附件、不编造论文） | 通过 |
-| MCP stdio 握手 + 17 个工具 | 通过 |
+| MCP stdio 握手 + 18 个工具 | 通过 |
 
 真实 API 端到端跑通 5 个岗位（3 实习 + 2 保研），简历全部 0 错误生成，2 封套磁信 0 编造风险。
 

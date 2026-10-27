@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import json
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import yaml
 
@@ -100,6 +102,21 @@ def _load_index() -> dict[str, Any]:
 
 def _save_index(index: dict[str, Any]) -> None:
     INDEX_PATH.write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+_INDEX_LOCK = threading.Lock()
+
+
+def _update_index(key: str, value: dict[str, Any]) -> None:
+    """只更新自己那个 key：读-改-写全程加锁。
+
+    并发抽取时如果各自 `_load_index()` 再整体写回，会互相覆盖对方的条目，
+    表现为「跑完只有最后一个文件夹进了缓存」。
+    """
+    with _INDEX_LOCK:
+        index = _load_index()
+        index[key] = value
+        _save_index(index)
 
 
 def _normalize_period(raw: str) -> str:
@@ -261,27 +278,79 @@ def build_one(folder: ProjectFolder, llm: DeepSeek | None = None, force: bool = 
             yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), encoding="utf-8"
         )
 
-    index[key] = {"fingerprint": fp, "evidence_ids": [e.id for e in items], "file": f"{slug}.yaml"}
-    _save_index(index)
+    _update_index(key, {"fingerprint": fp, "evidence_ids": [e.id for e in items], "file": f"{slug}.yaml"})
     return items, False
 
 
-def build_all(force: bool = False, llm: DeepSeek | None = None) -> dict[str, Any]:
+def build_all(
+    force: bool = False,
+    llm: DeepSeek | None = None,
+    workers: int = 3,
+    on_progress: Callable[[str, int, int], None] | None = None,
+) -> dict[str, Any]:
+    """并发抽取。每个文件夹一次 LLM 调用，串行跑 20 个文件夹要三四分钟。
+
+    并发只影响「谁先抽完」，落盘按完成顺序进行：证据文件按 slug 各写各的，
+    索引写入走 `_update_index` 加锁，不会互相覆盖。
+    """
     ensure_dirs()
     folders = scan_all()
-    report: dict[str, Any] = {"folders": len(folders), "created": [], "skipped": [], "empty": [], "errors": []}
-    for folder in folders:
-        try:
-            items, cached = build_one(folder, llm=llm, force=force)
-            if not items:
-                report["empty"].append(folder.name)
-            elif cached:
-                report["skipped"].append(folder.name)
-            else:
-                report["created"].append({"folder": folder.name, "count": len(items), "ids": [i.id for i in items]})
-        except Exception as exc:  # noqa: BLE001
-            report["errors"].append({"folder": folder.name, "error": str(exc)})
+    report: dict[str, Any] = {
+        "folders": len(folders),
+        "created": [],
+        "skipped": [],
+        "empty": [],
+        "errors": [],
+        "no_text": [],
+    }
+
+    # 一个字都没读到的文件夹不必浪费 token，直接报出来
+    todo: list[ProjectFolder] = []
+    for f in folders:
+        if f.text.strip():
+            todo.append(f)
+        else:
+            report["no_text"].append({"folder": f.name, "skipped": f.skipped})
+
+    workers = max(1, min(workers, 6))
+    total = len(todo)
+    done = 0
+
+    def _run(folder: ProjectFolder) -> tuple[ProjectFolder, list[Evidence], bool]:
+        return (folder, *build_one(folder, llm=llm, force=force))
+
+    if workers == 1 or total <= 1:
+        results = [_run(f) for f in todo]
+        for folder, items, cached in results:
+            _collect(report, folder, items, cached)
+        if on_progress:
+            on_progress("", total, total)
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(_run, f): f for f in todo}
+            for fut in as_completed(futures):
+                folder = futures[fut]
+                done += 1
+                try:
+                    _, items, cached = fut.result()
+                    _collect(report, folder, items, cached)
+                    if on_progress:
+                        on_progress(folder.name, done, total)
+                except Exception as exc:  # noqa: BLE001
+                    report["errors"].append({"folder": folder.name, "error": str(exc)})
+                    if on_progress:
+                        on_progress(f"{folder.name}（失败）", done, total)
+
     return report
+
+
+def _collect(report: dict[str, Any], folder: ProjectFolder, items: list[Evidence], cached: bool) -> None:
+    if not items:
+        report["empty"].append(folder.name)
+    elif cached:
+        report["skipped"].append(folder.name)
+    else:
+        report["created"].append({"folder": folder.name, "count": len(items), "ids": [i.id for i in items]})
 
 
 def load_all_evidence() -> list[Evidence]:

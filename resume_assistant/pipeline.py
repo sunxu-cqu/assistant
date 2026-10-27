@@ -41,8 +41,12 @@ def load_profile() -> Profile:
 
 # ------------------------------------------------------------------- 知识库
 
-def build_knowledge_base(force: bool = False) -> dict[str, Any]:
-    rep = build_all(force=force)
+def build_knowledge_base(
+    force: bool = False,
+    workers: int = 3,
+    on_progress: Any = None,
+) -> dict[str, Any]:
+    rep = build_all(force=force, workers=workers, on_progress=on_progress)
     # 抽完立刻告诉你「有多少条需要人工确认」，而不是让你自己去翻 YAML
     try:
         from .kb.review import audit
@@ -56,6 +60,43 @@ def build_knowledge_base(force: bool = False) -> dict[str, Any]:
     except Exception:  # noqa: BLE001
         pass
     return rep
+
+
+def scan_report() -> dict[str, Any]:
+    """只扫描不抽取：先看清楚每个文件夹读到了什么、漏了什么。
+
+    抽 20 个文件夹要花几分钟和不少 token，扫一遍只要几秒。
+    真实资料里总有几份 .doc、扫描件 PDF 或截图是读不出来的，
+    先看这份清单，比抽完对着「证据不对」发懵要强。
+    """
+    from .kb.builder import _load_index
+    from .kb.scanner import scan_all
+
+    folders = scan_all()
+    index = _load_index()
+    rows: list[dict[str, Any]] = []
+    for f in folders:
+        cached = index.get(f.name, {}).get("fingerprint") == f.fingerprint
+        rows.append(
+            {
+                "folder": f.name,
+                "files": f.files,
+                "skipped": f.skipped,
+                "chars": f.chars,
+                "truncated": f.truncated,
+                "cached": cached,
+                "encodings": f.encodings,
+            }
+        )
+
+    return {
+        "ok": True,
+        "folders": len(rows),
+        "total_chars": sum(r["chars"] for r in rows),
+        "no_text": [r["folder"] for r in rows if not r["files"]],
+        "need_extract": [r["folder"] for r in rows if r["files"] and not r["cached"]],
+        "items": rows,
+    }
 
 
 def knowledge_stats() -> dict[str, Any]:

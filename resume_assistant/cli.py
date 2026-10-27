@@ -30,9 +30,55 @@ def _out(data) -> None:
 # ------------------------------------------------------------------ 知识库
 
 @kb_app.command("build")
-def kb_build(force: bool = typer.Option(False, "--force", "-f", help="忽略缓存，全部重建")) -> None:
+def kb_build(
+    force: bool = typer.Option(False, "--force", "-f", help="忽略缓存，全部重建"),
+    workers: int = typer.Option(3, "--workers", "-j", help="并发抽取数（1 表示串行）"),
+) -> None:
     """扫描 workspace/projects 下的项目文件夹，抽取成就单元。"""
-    _out(pipeline.build_knowledge_base(force=force))
+    def progress(name: str, done: int, all_: int) -> None:
+        if name:
+            typer.echo(f"  [{done}/{all_}] {name}", err=True)
+
+    typer.echo(f"并发 {workers}，抽取中…（每个文件夹一次模型调用）", err=True)
+    _out(pipeline.build_knowledge_base(force=force, workers=workers, on_progress=progress))
+
+
+@kb_app.command("scan")
+def kb_scan(verbose: bool = typer.Option(False, "--verbose", "-v", help="列出每个文件")) -> None:
+    """只扫描不抽取：看清楚每个文件夹读到了什么、哪些文件读不出来。"""
+    rep = pipeline.scan_report()
+    if not rep["folders"]:
+        typer.echo("workspace/projects 下没有文件夹。")
+        return
+
+    typer.echo(f"{'文件夹':<32}{'文件':>4}{'字符':>8}   状态")
+    typer.echo("─" * 68)
+    for r in rep["items"]:
+        if not r["files"]:
+            status = "读不到任何文字"
+        elif r["cached"]:
+            status = "已抽取（资料未变，会跳过）"
+        else:
+            status = "待抽取"
+        if r["truncated"]:
+            status += " · 超长已截断"
+        typer.echo(f"{r['folder'][:30]:<32}{len(r['files']):>4}{r['chars']:>8}   {status}")
+        if verbose:
+            for f in r["files"]:
+                enc = r["encodings"].get(f)
+                typer.echo(f"      ✓ {f}" + (f"  [{enc}]" if enc and enc != "utf-8" else ""))
+
+    skipped = [(r["folder"], s) for r in rep["items"] for s in r["skipped"]]
+    if skipped:
+        typer.echo(f"\n读不出来的文件（{len(skipped)} 个）：")
+        for folder, s in skipped:
+            typer.echo(f"  ✗ {folder}/{s['file']}")
+            typer.echo(f"      {s['reason']}")
+
+    typer.echo(f"\n共 {rep['folders']} 个文件夹，{rep['total_chars']} 字符；待抽取 {len(rep['need_extract'])} 个。")
+    if rep["no_text"]:
+        typer.echo(f"读不到文字：{', '.join(rep['no_text'])}")
+        typer.echo("  这些文件夹不会消耗 token，但也不会有任何证据。")
 
 
 @kb_app.command("stats")
