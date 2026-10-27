@@ -156,6 +156,22 @@ def resume_preview(job_id: str, template: str = "single_column") -> dict:
 
 
 @mcp.tool()
+def cover_letter_generate(job_id: str) -> dict:
+    """为保研岗位生成套磁邮件（主题 + 正文），写入 data/output/<app_id>/cover_letter.md。
+
+    只适用于 kind="baoyan" 的岗位；实习岗位请用 resume_generate。
+
+    与简历不同，套磁信要建立「为什么是这个导师、为什么是我」的连接，更容易出现编造。
+    因此有三条硬约束：不得假装读过导师的具体论文（资料里没有论文标题就只能谈方向）、
+    不得编造自身经历、不得使用过度客套的空话。
+
+    返回 warnings 里若出现「编造风险」，说明模型引用了导师资料中不存在的论文，
+    已自动带反馈重写一次，仍存在则需人工处理。
+    """
+    return _safe(pipeline.generate_letter, job_id=job_id)
+
+
+@mcp.tool()
 def template_list() -> dict:
     """列出可用简历模板。single_column 适合实习网申，academic 适合保研套磁。"""
     return _safe(lambda: {"ok": True, "items": pipeline.all_templates()})

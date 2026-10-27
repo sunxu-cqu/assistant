@@ -3,7 +3,7 @@
 跑法：
     ./.venv/Scripts/python.exe tests/e2e_real.py
 
-流程：10 个刁难资料 → 抽取 → 4 个岗位（2 实习 + 2 保研）→ 匹配 → 生成 → 状态机
+流程：10 个刁难资料 → 抽取 → 5 个岗位（3 实习 + 2 保研）→ 匹配 → 简历 → 套磁信 → 状态机
 """
 
 from __future__ import annotations
@@ -141,8 +141,45 @@ def main() -> int:
         for w in lint["warnings"][:3]:
             print(f"     ! {w}")
 
+    # ---------------------------------------------------------------- 套磁信
+    hr("6. 套磁信生成（仅保研）")
+    letters = []
+    for job_id, kind, title in job_ids:
+        if kind != "baoyan":
+            # 实习岗位必须被明确拒绝，而不是生成一封不伦不类的信
+            r = pipeline.generate_letter(job_id)
+            print(f"  {'ok ' if not r.get('ok') else 'FAIL'} 实习岗位被拒绝：{r.get('error')}")
+            continue
+        t = time.time()
+        try:
+            g = pipeline.generate_letter(job_id, max_retry=1)
+        except Exception:  # noqa: BLE001
+            print(f"  EXCEPTION {title}")
+            traceback.print_exc()
+            continue
+        if not g.get("ok"):
+            print(f"  FAIL {title} ({time.time() - t:.1f}s): {g.get('error')}")
+            continue
+        cl = g["letter"]
+        print(f"\n【{title}】{time.time() - t:.1f}s | 字数 {g['word_count']}")
+        print(f"   主题：{cl['subject']}")
+        print(f"   开头：{cl['body'].splitlines()[0]}")
+        print(f"   引用证据 {len(cl['evidence_ids'])} 条：{', '.join(cl['evidence_ids'][:4])}")
+        if cl["warnings"]:
+            for w in cl["warnings"]:
+                print(f"   ⚠ {w}")
+        else:
+            print("   ok 无编造风险警告")
+        # 称呼不能叠字，也不能凭空承诺附件
+        head = cl["body"].splitlines()[0]
+        assert "老师老师" not in head and "教授老师" not in head, f"称呼叠字: {head}"
+        for bad in ("成绩单", "推荐信", "获奖证书", "作品集"):
+            assert bad not in cl["body"], f"虚构附件: {bad}"
+        print(f"   已保存：{cl['path']}")
+        letters.append(cl)
+
     # ---------------------------------------------------------------- 状态机
-    hr("6. 状态机全流程")
+    hr("7. 状态机全流程")
     for app_id, kind, title, _ in apps:
         line = ["sent"]
         if kind == "baoyan":
@@ -161,7 +198,7 @@ def main() -> int:
     hr("汇总")
     total = time.time() - t0
     print(f"总耗时 {total:.1f}s")
-    print(f"证据 {len(evs)} 条 | 岗位 {len(job_ids)} 个 | 成功生成 {len(apps)} 份")
+    print(f"证据 {len(evs)} 条 | 岗位 {len(job_ids)} 个 | 成功生成 {len(apps)} 份简历 / {len(letters)} 封套磁信")
     print(f"产物目录: {SANDBOX / 'data' / 'output'}")
     return 0
 

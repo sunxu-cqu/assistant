@@ -291,6 +291,21 @@ class MatchReport(BaseModel):
     generated_at: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
 
+# ------------------------------------------------------------ 套磁信
+
+class CoverLetter(BaseModel):
+    job_id: str
+    subject: str = ""
+    body: str = ""
+    evidence_ids: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    path: str = ""
+    generated_at: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
+
+    def word_count(self) -> int:
+        return len([c for c in self.body if not c.isspace()])
+
+
 # ------------------------------------------------------------- 工具函数
 
 _NUM_RE = re.compile(r"\d+(?:\.\d+)?%?")

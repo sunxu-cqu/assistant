@@ -152,6 +152,30 @@ def templates_cmd() -> None:
         typer.echo(f"{t['key']:16s} {t['name']}  —  {t['description']}")
 
 
+@app.command("letter")
+def letter_cmd(job_id: str) -> None:
+    """生成保研套磁信（主题 + 正文）。"""
+    res = pipeline.generate_letter(job_id)
+    if not res.get("ok"):
+        _out(res)
+        raise typer.Exit(1)
+
+    letter = res["letter"]
+    typer.echo("─" * 60)
+    typer.echo(f"主题：{letter['subject']}")
+    typer.echo("─" * 60)
+    typer.echo(letter["body"])
+    typer.echo("─" * 60)
+    typer.echo(f"字数：{res['word_count']}")
+    if letter["evidence_ids"]:
+        typer.echo(f"引用证据：{', '.join(letter['evidence_ids'])}")
+    if res["warnings"]:
+        typer.echo("\n需人工复核：")
+        for w in res["warnings"]:
+            typer.echo(f"  ! {w}")
+    typer.echo(f"\n已保存：{res['path']}")
+
+
 # ---------------------------------------------------------------- 投递状态机
 
 @app_app.command("list")

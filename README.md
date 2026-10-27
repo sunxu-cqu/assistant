@@ -13,6 +13,7 @@
 | 知识库 | 一个项目一个文件夹 → 抽取成原子成就单元 | LLM 抽取，代码校验 |
 | 匹配 | BM25 + 标签召回 Top-30 → LLM 精排 + 缺口分析 | 混合 |
 | 组稿 | 按模板槽位选材 → LLM 只改写措辞 | LLM 受限生成 |
+| 套磁信 | 保研专用：读导师方向 + 引用证据写信 | LLM 受限生成 + 代码查编造 |
 | 校验 | 结构检查 + 数字溯源比对 | **纯代码，不花 token** |
 | 渲染 | Resume IR → Typst → PDF | 纯代码 |
 | 状态机 | 投递全生命周期 | 纯代码 + SQLite |
@@ -116,6 +117,7 @@ workspace/projects/2024-某项目/
 ./.venv/Scripts/python.exe -m resume_assistant.cli job list
 ./.venv/Scripts/python.exe -m resume_assistant.cli match job_xxx
 ./.venv/Scripts/python.exe -m resume_assistant.cli gen job_xxx --template academic
+./.venv/Scripts/python.exe -m resume_assistant.cli letter job_xxx     # 保研套磁信
 ```
 
 产物：`data/output/<app_id>/resume.pdf`（另有 `ir.yaml` 和 `resume.typ`，都可手改后重新编译）。
@@ -155,6 +157,7 @@ WorkBuddy 的配置文件是 `~/.workbuddy-ai/mcp.json`。写完后需要在连�
 | `job_match` | 匹配打分 + 缺口分析 |
 | `resume_generate` | 生成 PDF（含校验闸门） |
 | `resume_preview` | 只出 IR 不渲染，快速看结构 |
+| `cover_letter_generate` | 保研套磁信（Markdown，仅 baoyan 岗位） |
 | `template_list` | 模板列表 |
 | `app_list` / `app_detail` / `app_advance` | 投递记录与状态机 |
 | `app_timeline` | 状态流转历史 |
@@ -220,6 +223,29 @@ draft → matched → composed → sent → screening → interview → offer
 
 ---
 
+## 套磁信
+
+`cover_letter_generate` 只对 `baoyan` 岗位开放，实习岗位直接拒绝——硬套一封「尊敬的 HR」的信没有意义。
+
+写法不是自由发挥，而是把**导师方向 + 最相关的前 3 条证据**喂进去，让模型做「连线」而不是「创作」。
+
+三条硬约束，代码和 prompt 双重兜底：
+
+| 约束 | 为什么 | 怎么拦 |
+|---|---|---|
+| 不提没做过的论文 | 「拜读过您的《XX》」是最容易脱口而出的假话 | 正则抽出正文里所有 `《...》`，与 JD 原文 + 导师方向比对，对不上就重写 |
+| 不提不存在的附件 | 系统只产出简历，正文却说「附上成绩单和课题报告」 | 词表黑名单（成绩单/推荐信/获奖证书/作品集/论文全文），命中即重写 |
+| 不写空话吹捧 | 「您的研究享誉国际」这类句子让信立刻贬值 | prompt 要求每个夸奖必须挂一个具体方向或证据 |
+
+另外还有两处纯代码修正，属于「模型不该被信任的细节」：
+
+- **称呼**：`mentor` 字段可能已经是「张老师」，直接拼会变成「尊敬的张老师老师：」。`_salutation` 先判断是否已带职称后缀（老师/教授/研究员/院士），`_fix_salutation` 再兜一层叠字替换。
+- **落款**：只从 `profile.yaml` 取真实姓名、学校、专业、电话、邮箱，不让模型自己编联系方式。
+
+产物是 `data/output/<app_id>/cover_letter.md`，正文通常 400–700 字。检查不通过会自动带反馈重写一次，仍不过则返回警告清单——**信还是会给你，但风险摆在你面前**。
+
+---
+
 ## 模板
 
 `resume_assistant/render/templates/*.yaml` 定义版式与槽位（section 顺序、条目上限、每条 bullet 数）。
@@ -262,7 +288,7 @@ draft → matched → composed → sent → screening → interview → offer
 五个脚本，前三个不消耗 API 额度：
 
 ```bash
-# 全链路冒烟（20 项断言：知识库→匹配→组稿→校验→渲染→状态机）
+# 全链路冒烟（25 项断言：知识库→匹配→组稿→校验→渲染→状态机→资格校验）
 set RESUME_ASSISTANT_MOCK=1
 ./.venv/Scripts/python.exe tests/smoke.py
 
@@ -297,8 +323,10 @@ set RESUME_ASSISTANT_MOCK=1
 | 数字溯源不误杀型号数字（V100）与未入 metrics 的真实数字 | 通过 |
 | Typst 渲染中文 PDF（两套模板，单页） | 通过 |
 | 双线状态机（保研 / 实习，含非法转移拒绝） | 通过 |
-| MCP stdio 握手 + 13 个工具 | 通过 |
+| 硬性资格校验（届别 / 学历 / 专业） | 通过 |
+| 套磁信（称呼不叠字、不虚构附件、不编造论文） | 通过 |
+| MCP stdio 握手 + 14 个工具 | 通过 |
 
-真实 API 端到端跑通 4 个岗位（2 实习 + 2 保研），全部 0 错误生成。
+真实 API 端到端跑通 5 个岗位（3 实习 + 2 保研），简历全部 0 错误生成，2 封套磁信 0 编造风险。
 
 

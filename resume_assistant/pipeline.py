@@ -258,6 +258,56 @@ def preview_ir(job_id: str, template_key: str = "single_column") -> dict[str, An
     return {"ok": True, "ir": ir.model_dump(mode="json"), "lint": lint(ir, evs, load_profile()).to_dict()}
 
 
+# ---------------------------------------------------------------- 套磁信
+
+def generate_letter(job_id: str, max_retry: int = 1) -> dict[str, Any]:
+    """为保研岗位生成套磁邮件（主题 + 正文）。"""
+    from .compose.letter import generate as compose_letter
+    from .compose.letter import to_markdown
+
+    job = db.get_job(job_id)
+    if job is None:
+        return {"ok": False, "stage": "load", "error": f"岗位不存在：{job_id}"}
+    if job.kind != JobKind.BAOYAN:
+        return {
+            "ok": False,
+            "stage": "kind",
+            "error": f"套磁信只适用于保研类岗位（kind=baoyan），当前是 {job.kind.value}",
+        }
+
+    profile = load_profile()
+    if not profile.name:
+        return {"ok": False, "stage": "profile", "error": f"请先填写 {PROFILE_PATH}"}
+
+    evs = load_all_evidence()
+    if not evs:
+        return {"ok": False, "stage": "load", "error": "知识库为空，请先构建知识库"}
+
+    report = db.get_match(job_id)
+    if report is None:
+        report = match_job(job, evs, llm=get_llm())
+        db.save_match(report)
+
+    letter = compose_letter(job, profile, report, evs, llm=get_llm(), max_retry=max_retry)
+
+    app = db.find_application_by_job(job_id) or db.create_application(job)
+    out_dir = OUTPUT_DIR / app.id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    md_path = out_dir / "cover_letter.md"
+    md_path.write_text(to_markdown(letter, job), encoding="utf-8")
+    letter.path = str(md_path)
+
+    return {
+        "ok": True,
+        "application_id": app.id,
+        "letter": letter.model_dump(mode="json"),
+        "word_count": letter.word_count(),
+        "warnings": letter.warnings,
+        "path": str(md_path),
+        "hint": None if not letter.warnings else "存在提示项，建议人工复核后再发送",
+    }
+
+
 # ------------------------------------------------------------------ 状态机
 
 def advance(app_id: str, to_status: str, note: str = "") -> dict[str, Any]:
