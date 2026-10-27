@@ -151,6 +151,44 @@ def main() -> int:
         any(i.level == "warn" for i in elig_check(mk_job(["计算机、数学、统计等相关专业"]), mech).issues),
     )
 
+    print("\n[10] 排版字号自适应")
+    from resume_assistant.compose.templates import load_template
+    from resume_assistant.models import Bullet, IREntry, IRSection, ResumeIR
+    from resume_assistant.render.typst import build_source, render_pdf
+
+    tmpl = load_template("single_column")
+    tiny = ResumeIR(
+        contact={"name": "张三", "phone": "13800000000"},
+        sections=[
+            IRSection(
+                type="projects",
+                title="项目经历",
+                entries=[
+                    IREntry(
+                        heading="某小项目",
+                        meta="2024.03 ~ 2024.06",
+                        bullets=[Bullet(text="做了点小事。", evidence_id="ev_x")],
+                    )
+                ],
+            )
+        ],
+    )
+    # 字号必须等比推导，否则放大后会出现「正文变大、标题不变」的错位
+    src10 = build_source(tiny, tmpl, font_size=10)
+    src12 = build_source(tiny, tmpl, font_size=12)
+    check("标题字号随基准等比放大", "size: 13.8pt" in src12 and "size: 11.5pt" in src10)
+    check("姓名字号随基准等比放大", "size: 22.8pt" in src12 and "size: 19pt" in src10)
+
+    out = ROOT / "tests" / "sandbox" / "_fit"
+    shutil.rmtree(out, ignore_errors=True)
+    typ, pdf = render_pdf(tiny, tmpl, out, autofit=True)
+    base_pt = float(tmpl.page["font_size"].rstrip("pt"))
+    picked = float(typ.read_text(encoding="utf-8").split("size: ")[1].split("pt")[0])
+    check("内容极少时自动放大字号", pdf is not None and picked > base_pt, f"{picked}pt")
+    check("试排中间产物已清理", not list(out.glob("_fit*")))
+    check("自适应关闭时用模板原字号", "size: %gpt" % base_pt in build_source(tiny, tmpl))
+    shutil.rmtree(out, ignore_errors=True)
+
     print(f"\n{'=' * 46}")
     print(f"通过 {len(PASS)} 项，失败 {len(FAIL)} 项")
     if FAIL:

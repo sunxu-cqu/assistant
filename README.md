@@ -261,6 +261,19 @@ draft → matched → composed → sent → screening → interview → offer
 - `academic` 的 experience 严格限定 `[intern, research]`，**没有对应经历时整段不出现**，而不是把课程项目塞进去冒充科研经历
 - `academic` 的 projects 接收 `[project, course, award, activity]`
 
+### 字号自适应
+
+内容偏少时（比如只有 3 个项目）用固定字号会把 A4 填成半页空白，看着像没做完。
+
+`render_pdf` 因此做了一次「试排」：以模板字号为起点，依次试 1.20× / 1.10× / 1.07× 三档，
+取**页数不变的前提下最大的那个**。标题、姓名、日期都按基准字号等比推导，不会出现「正文变大、标题不变」的错位。
+试排产物编译完即删，最终只留 `resume.typ` + `resume.pdf`。
+
+实测：单栏模板填充率 59% → 70%，学术模板 75% → 89%，页数都是 1 页。
+上限由模板的 `page.max_scale` 控制（单栏 1.2，学术 1.15），设为 `1.0` 即关闭。
+
+代价是每次生成多 1–3 次 Typst 编译（每次约 100–300ms），可忽略。
+
 ---
 
 ## 已知限制（P0）
@@ -288,7 +301,7 @@ draft → matched → composed → sent → screening → interview → offer
 五个脚本，前三个不消耗 API 额度：
 
 ```bash
-# 全链路冒烟（25 项断言：知识库→匹配→组稿→校验→渲染→状态机→资格校验）
+# 全链路冒烟（30 项断言：知识库→匹配→组稿→校验→渲染→状态机→资格校验→排版自适应）
 set RESUME_ASSISTANT_MOCK=1
 ./.venv/Scripts/python.exe tests/smoke.py
 
@@ -322,6 +335,7 @@ set RESUME_ASSISTANT_MOCK=1
 | 校验闸门拦截编造数字 / 虚假 evidence_id | 通过 |
 | 数字溯源不误杀型号数字（V100）与未入 metrics 的真实数字 | 通过 |
 | Typst 渲染中文 PDF（两套模板，单页） | 通过 |
+| 字号自适应（页数不变前提下放大，等比推导标题） | 通过 |
 | 双线状态机（保研 / 实习，含非法转移拒绝） | 通过 |
 | 硬性资格校验（届别 / 学历 / 专业） | 通过 |
 | 套磁信（称呼不叠字、不虚构附件、不编造论文） | 通过 |

@@ -5,6 +5,8 @@ page:
   margin_x: 1.6cm
   margin_y: 1.4cm
   font_size: 10pt
+  # 内容偏少时自动放大字号填充页面，上限为此倍数；设为 1.0 关闭自适应
+  max_scale: 1.2
   accent: "#1f4e79"
 sections:
   - type: education

@@ -35,3 +35,7 @@ Thumbs.db
 tests/sandbox/data/
 tests/sandbox/*.log
 tests/sandbox/*.png
+
+# 字号自适应对比试排产物
+tests/sandbox/fit_*/
+tests/sandbox/_fit/

@@ -5,6 +5,7 @@ page:
   margin_x: 1.8cm
   margin_y: 1.5cm
   font_size: 10.5pt
+  max_scale: 1.15
   accent: "#4a3b78"
 sections:
   - type: education
