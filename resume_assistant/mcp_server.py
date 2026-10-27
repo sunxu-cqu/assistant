@@ -74,6 +74,23 @@ def kb_list_evidence(limit: int = 100) -> dict:
 
 
 @mcp.tool()
+def doctor() -> dict:
+    """环境自检：依赖、API key、profile、资料文件夹、中文字体、模板。
+
+    检查的是「会悄悄做错」而不是「会崩溃」的那类问题：
+    - 少装 python-pptx → PPT 里的资料静默丢失，不报错
+    - profile.yaml 还是示例数据 → 简历上写着「张三」
+    - 缺中文字体 → Typst 不报错，但 PDF 里全是方框
+    - 没填 API key → 等到第一次抽取才 401
+
+    ok=false 时按 fix 字段逐条处理即可。
+    """
+    from . import doctor as _doctor
+
+    return _safe(_doctor.run)
+
+
+@mcp.tool()
 def kb_scan() -> dict:
     """只扫描不抽取：每个文件夹读到了多少字、哪些文件读不出来。
 

@@ -27,6 +27,22 @@ def _out(data) -> None:
     typer.echo(json.dumps(data, ensure_ascii=False, indent=2))
 
 
+# ------------------------------------------------------------------ 自检
+
+@app.command("doctor")
+def doctor_cmd(as_json: bool = typer.Option(False, "--json", help="输出 JSON")) -> None:
+    """环境自检：依赖、API key、profile、资料、字体、模板。"""
+    from . import doctor
+
+    res = doctor.run()
+    if as_json:
+        _out(res)
+    else:
+        typer.echo(doctor.to_text(res))
+    if not res["ok"]:
+        raise typer.Exit(1)
+
+
 # ------------------------------------------------------------------ 知识库
 
 @kb_app.command("build")

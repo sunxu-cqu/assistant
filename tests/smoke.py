@@ -45,6 +45,18 @@ def main() -> int:
     from resume_assistant.models import AppStatus, JobKind, can_transition
     from resume_assistant.store import db
 
+    print("\n[0] 环境自检")
+    from resume_assistant import doctor
+
+    doc = doctor.run()
+    check("自检能跑完", isinstance(doc["checks"], list) and len(doc["checks"]) >= 8, str(len(doc["checks"])))
+    check("识别出 profile 仍是示例数据", doc["ok"] is False and any(
+        "姓名" in c["name"] for c in doc["checks"] if c["level"] == "fail"
+    ))
+    check("依赖检查通过", any("依赖" in c["name"] and c["level"] == "ok" for c in doc["checks"]))
+    check("中文字体能渲染", any("Typst" in c["name"] and c["level"] == "ok" for c in doc["checks"]))
+    check("自检文本可读", "环境自检" in doctor.to_text(doc))
+
     print("\n[1] 模块导入")
     check("pipeline 可导入", True)
 

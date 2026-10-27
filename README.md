@@ -77,7 +77,31 @@ copy .env.example .env
 
 编辑 `data/profile.yaml`：姓名、联系方式、教育、**绩点、排名**、技能池。
 
-### 3. 放资料
+### 3. 先自检一遍
+
+```bash
+./.venv/Scripts/python.exe -m resume_assistant.cli doctor
+```
+
+```
+环境自检 · C://简历助手
+────────────────────────────────────────────────────────
+  ✓ Python 3.13.14
+  ✓ 依赖 13/13
+  ✓ DEEPSEEK_API_KEY — 已配置（sk-881…，共 35 位）
+  ✗ profile 姓名未填写 — 当前是「张三」
+      → 改成你自己的名字
+  ! 教育经历仍是示例数据 — 某某大学
+      → 改成你的学校/专业
+  ✓ 项目文件夹 2 个
+  ✓ Typst 中文渲染
+────────────────────────────────────────────────────────
+1 项必须处理，1 项建议处理。
+```
+
+查的都是**会悄悄做错**而不是会崩溃的事：少装一个 python-pptx，表现是「PPT 里的资料没进知识库」；profile 还是示例数据，表现是「简历上写着张三」；缺中文字体，Typst 不报错但 PDF 里全是方框。
+
+### 4. 放资料
 
 把每个项目做成一个文件夹放进 `workspace/projects/`：
 
@@ -95,7 +119,7 @@ workspace/projects/2024-某项目/
 - **GBK 编码的 txt/csv**：中文 Windows 导出的文本基本都是 GBK，按 utf-8 读会静默变乱码。现在按 BOM → utf-8 → gb18030 → big5 依次试，读不出来会明确报错而不是塞一堆乱码给模型。
 - **读不出来的文件会被列出来，而不是悄悄跳过**：老版 `.doc`（请另存为 docx）、扫描件 PDF、截图（都没有文字层）、压缩包。跑 `kb scan` 就能看到每个文件的状态和原因。
 
-### 4. 先扫一遍，再决定抽不抽
+### 5. 先扫一遍，再决定抽不抽
 
 ```bash
 ./.venv/Scripts/python.exe -m resume_assistant.cli kb scan
@@ -120,7 +144,7 @@ workspace/projects/2024-某项目/
 
 扫描不花 token。**先看这一步，比抽完对着「证据不对」发懵强。**
 
-### 5. 构建知识库
+### 6. 构建知识库
 
 ```bash
 ./.venv/Scripts/python.exe -m resume_assistant.cli kb build
@@ -156,7 +180,7 @@ workspace/projects/2024-某项目/
 | 没有 `skill_tags` | 检索只剩 BM25，召回明显变差 |
 | 没有 `raw_excerpt` | 无法核对这条是不是编的 |
 
-### 6. 加岗位并生成简历
+### 7. 加岗位并生成简历
 
 ```bash
 # 手动粘贴（推荐）
@@ -176,7 +200,7 @@ workspace/projects/2024-某项目/
 
 产物：`data/output/<app_id>/resume.pdf`（另有 `ir.yaml` 和 `resume.typ`，都可手改后重新编译）。
 
-### 7. 改一两句话再出 PDF
+### 8. 改一两句话再出 PDF
 
 生成的措辞不可能句句合意。`ir.yaml` 就是给你改的——删条目、调顺序、换说法都行，改完不用重新调模型：
 
@@ -216,6 +240,7 @@ WorkBuddy 的配置文件是 `~/.workbuddy-ai/mcp.json`。写完后需要在连�
 
 | 工具 | 用途 |
 |---|---|
+| `doctor` | 环境自检（依赖 / key / profile / 字体） |
 | `kb_build` | 扫描项目文件夹并抽取证据（增量） |
 | `kb_scan` | 只扫描不抽取，看每个文件夹读到了什么 |
 | `kb_stats` / `kb_list_evidence` | 知识库概况 / 明细核对 |
@@ -372,7 +397,7 @@ draft → matched → composed → sent → screening → interview → offer
 五个脚本，前三个不消耗 API 额度：
 
 ```bash
-# 全链路冒烟（58 项断言：资料接入→知识库→匹配→组稿→校验→渲染→状态机→校对）
+# 全链路冒烟（63 项断言：资料接入→知识库→匹配→组稿→校验→渲染→状态机→校对）
 set RESUME_ASSISTANT_MOCK=1
 ./.venv/Scripts/python.exe tests/smoke.py
 
@@ -413,11 +438,12 @@ set RESUME_ASSISTANT_MOCK=1
 | 资料接入：GBK / UTF-16 / BOM 解码，pptx / xlsx 抽取 | 通过 |
 | 读不出的文件带原因上报（.doc / 扫描件 / 截图），锁文件静默忽略 | 通过 |
 | 并发抽取（3 线程，索引不互相覆盖） | 通过 |
+| 环境自检（依赖 / 示例 profile / 中文字体） | 通过 |
 | 冒烟测试沙箱隔离（不写真实 data/） | 通过 |
 | 双线状态机（保研 / 实习，含非法转移拒绝） | 通过 |
 | 硬性资格校验（届别 / 学历 / 专业） | 通过 |
 | 套磁信（称呼不叠字、不虚构附件、不编造论文） | 通过 |
-| MCP stdio 握手 + 18 个工具 | 通过 |
+| MCP stdio 握手 + 19 个工具 | 通过 |
 
 真实 API 端到端跑通 5 个岗位（3 实习 + 2 保研），简历全部 0 错误生成，2 封套磁信 0 编造风险。
 
