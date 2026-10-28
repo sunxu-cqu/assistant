@@ -481,7 +481,7 @@ draft → matched → composed → sent → screening → interview → offer
 五个脚本，前三个不消耗 API 额度：
 
 ```bash
-# 全链路冒烟（95 项断言：资料接入→知识库→匹配→组稿→校验→渲染→状态机→校对→看板→开场白）
+# 全链路冒烟（96 项断言：资料接入→知识库→匹配→组稿→校验→渲染→状态机→校对→看板→开场白）
 set RESUME_ASSISTANT_MOCK=1
 ./.venv/Scripts/python.exe tests/smoke.py
 

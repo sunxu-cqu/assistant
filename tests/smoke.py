@@ -67,6 +67,13 @@ def main() -> int:
     evs = load_all_evidence()
     check("产出证据", len(evs) >= 2, f"got {len(evs)}")
 
+    again = pipeline.build_knowledge_base()
+    check(
+        "第二次构建全部命中缓存，不重抽",
+        not again["created"] and len(again["skipped"]) >= 2,
+        f"created={len(again['created'])} skipped={len(again['skipped'])}",
+    )
+
     print("\n[3] 知识库概况")
     st = pipeline.knowledge_stats()
     check("统计可用", st["evidence_count"] == len(evs), str(st))

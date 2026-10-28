@@ -354,13 +354,28 @@ def build_all(
         "no_text": [],
     }
 
-    # 一个字都没读到的文件夹不必浪费 token，直接报出来
+    # 一个字都没读到的文件夹不必浪费 token，直接报出来。
+    # 命中增量的也先剔出去：build_one 里虽然也会跳过，但进度条会把
+    # 「已缓存」算进「待抽取」，让人以为每次 kb build 都在重抽。
+    index = _load_index()
+
+    def _cached(f: ProjectFolder) -> bool:
+        if force:
+            return False
+        entry = index.get(f.name) or {}
+        if entry.get("fingerprint") != f.fingerprint:
+            return False
+        fname = entry.get("file")
+        return bool(fname) and (EVIDENCE_DIR / fname).exists()
+
     todo: list[ProjectFolder] = []
     for f in folders:
-        if f.text.strip():
-            todo.append(f)
-        else:
+        if not f.text.strip():
             report["no_text"].append({"folder": f.name, "skipped": f.skipped})
+        elif _cached(f):
+            report["skipped"].append(f.name)
+        else:
+            todo.append(f)
 
     workers = max(1, min(workers, 6))
     total = len(todo)

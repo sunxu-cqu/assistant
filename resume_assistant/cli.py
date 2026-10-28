@@ -55,7 +55,14 @@ def kb_build(
         if name:
             typer.echo(f"  [{done}/{all_}] {name}", err=True)
 
-    typer.echo(f"并发 {workers}，抽取中…（每个文件夹一次模型调用）", err=True)
+    sr = pipeline.scan_report()
+    todo = len(sr["need_extract"])
+    if todo:
+        typer.echo(f"待抽取 {todo} 个文件夹，并发 {workers}…（每个文件夹一次模型调用）", err=True)
+    elif sr["no_text"]:
+        typer.echo(f"没有待抽取的文件夹（{len(sr['no_text'])} 个读不到文字，跑 kb scan -v 看原因）", err=True)
+    elif sr["folders"]:
+        typer.echo(f"{sr['folders']} 个文件夹都已是最新，跳过（要重抽加 --force）", err=True)
     _out(pipeline.build_knowledge_base(force=force, workers=workers, on_progress=progress))
 
 
