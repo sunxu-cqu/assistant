@@ -154,7 +154,12 @@ def _check_projects() -> Check:
         return Check("fail", "workspace/projects 不存在", "", "建这个目录，一个项目一个文件夹")
     folders = [d for d in PROJECTS_DIR.iterdir() if d.is_dir() and not d.name.startswith(".")]
     if not folders:
-        return Check("fail", "workspace/projects 是空的", "", "把项目资料文件夹放进去")
+        return Check(
+            "fail",
+            "workspace/projects 是空的",
+            "",
+            "把项目资料文件夹放进去（一个项目一个文件夹）；想先试跑，把 workspace/samples/ 里的示例复制过来",
+        )
     empty = [d.name for d in folders if not any(p.is_file() for p in d.rglob("*"))]
     if empty:
         return Check("warn", f"项目文件夹 {len(folders)} 个", f"其中 {len(empty)} 个是空的：{', '.join(empty[:3])}")

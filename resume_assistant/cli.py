@@ -318,6 +318,34 @@ def letter_cmd(job_id: str) -> None:
     typer.echo(f"\n已保存：{res['path']}")
 
 
+@app.command("pitch")
+def pitch_cmd(job_id: str) -> None:
+    """生成实习投递开场白（站内信 + 邮件两版）。"""
+    res = pipeline.generate_pitch(job_id)
+    if not res.get("ok"):
+        _out(res)
+        raise typer.Exit(1)
+
+    p = res["pitch"]
+    cc = res["char_count"]
+    typer.echo("─" * 60)
+    typer.echo(f"站内信（{cc['short']} 字，≤80 最好）")
+    typer.echo("─" * 60)
+    typer.echo(p["short"])
+    typer.echo("\n" + "─" * 60)
+    typer.echo(f"邮件正文（{cc['full']} 字，≤220）")
+    typer.echo("─" * 60)
+    typer.echo(p["full"])
+    typer.echo("─" * 60)
+    if p["evidence_ids"]:
+        typer.echo(f"引用证据：{', '.join(p['evidence_ids'])}")
+    if res["warnings"]:
+        typer.echo("\n需人工复核：")
+        for w in res["warnings"]:
+            typer.echo(f"  ! {w}")
+    typer.echo(f"\n已保存：{res['path']}")
+
+
 # ---------------------------------------------------------------- 投递状态机
 
 @app_app.command("list")

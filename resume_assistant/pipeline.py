@@ -47,6 +47,11 @@ def build_knowledge_base(
     on_progress: Any = None,
 ) -> dict[str, Any]:
     rep = build_all(force=force, workers=workers, on_progress=on_progress)
+    if rep["folders"] == 0:
+        rep["hint"] = (
+            "workspace/projects 下没有项目文件夹。一个项目一个文件夹放进去；"
+            "想先试跑，把 workspace/samples/ 里的两个示例复制过来"
+        )
     # 抽完立刻告诉你「有多少条需要人工确认」，而不是让你自己去翻 YAML
     try:
         from .kb.review import audit
@@ -526,6 +531,54 @@ def board(write_html: bool = True, today: Any = None) -> dict[str, Any]:
     data = build(html=write_html, today=today)
     data["text"] = to_text(data)
     return data
+
+
+def generate_pitch(job_id: str, max_retry: int = 1) -> dict[str, Any]:
+    """为实习岗位生成投递开场白（站内信 + 邮件两版）。"""
+    from .compose.pitch import generate as compose_pitch
+    from .compose.pitch import to_markdown
+
+    job = db.get_job(job_id)
+    if job is None:
+        return {"ok": False, "stage": "load", "error": f"岗位不存在：{job_id}"}
+    if job.kind != JobKind.INTERNSHIP:
+        return {
+            "ok": False,
+            "stage": "kind",
+            "error": f"开场白只适用于实习岗位（kind=internship），保研请用 letter 生成套磁信。当前是 {job.kind.value}",
+        }
+
+    profile = load_profile()
+    if not profile.name:
+        return {"ok": False, "stage": "profile", "error": f"请先填写 {PROFILE_PATH}"}
+
+    evs = load_all_evidence()
+    if not evs:
+        return {"ok": False, "stage": "load", "error": "知识库为空，请先构建知识库"}
+
+    report = db.get_match(job_id)
+    if report is None:
+        report = match_job(job, evs, llm=get_llm())
+        db.save_match(report)
+
+    pitch = compose_pitch(job, profile, report, evs, llm=get_llm(), max_retry=max_retry)
+
+    app = db.find_application_by_job(job_id) or db.create_application(job)
+    out_dir = OUTPUT_DIR / app.id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    md_path = out_dir / "pitch.md"
+    md_path.write_text(to_markdown(pitch, job), encoding="utf-8")
+    pitch.path = str(md_path)
+
+    return {
+        "ok": True,
+        "application_id": app.id,
+        "pitch": pitch.model_dump(mode="json"),
+        "char_count": pitch.char_count(),
+        "warnings": pitch.warnings,
+        "path": str(md_path),
+        "hint": None if not pitch.warnings else "存在提示项，建议人工复核后再发送",
+    }
 
 
 def all_templates() -> list[dict[str, str]]:

@@ -406,6 +406,34 @@ def main() -> int:
     html_text = Path(bp["html_path"]).read_text(encoding="utf-8")
     check("看板页含分栏标题", "待办" in html_text and "已投出" in html_text)
 
+    print("\n[16] 实习开场白")
+    from resume_assistant.compose import pitch as pitch_mod
+    from resume_assistant.models import Pitch
+
+    pr = pipeline.generate_pitch(job_id)
+    check("开场白生成成功", pr.get("ok") is True, str(pr)[:160])
+    check("站内信不超过 90 字", pr["char_count"]["short"] <= 90, str(pr.get("char_count")))
+    check("产出 pitch.md", Path(pr["path"]).exists(), pr.get("path", ""))
+    check("保研岗位拒绝生成开场白", pipeline.generate_pitch(job2_id).get("ok") is False)
+
+    prof = pipeline.load_profile()
+    cand = load_all_evidence()[:2]
+    job_obj = _db.get_job(job_id)
+
+    no_avail = prof.model_copy(update={"internship_available": ""})
+    p_avail = Pitch(job_id="x", short="我是张三，每周 4 天可实习。", full="您好，我是张三，每周 4 天可实习。")
+    check(
+        "profile 没填可实习时间时判编造",
+        any("internship_available" in w for w in pitch_mod._check(p_avail, job_obj, cand, no_avail)),
+        str(pitch_mod._check(p_avail, job_obj, cand, no_avail)),
+    )
+    p_num = Pitch(job_id="x", short="把准确率做到 99.9%", full="您好，我是张三，把准确率做到 99.9%。")
+    check("编造的数字被拦下", any("找不到出处" in w for w in pitch_mod._check(p_num, job_obj, cand, prof)))
+    p_empty = Pitch(job_id="x", short="贵司平台广阔", full="非常期待加入，贵司平台广阔。")
+    check("空话被识别", any("空话" in w for w in pitch_mod._check(p_empty, job_obj, cand, prof)))
+    p_long = Pitch(job_id="x", short="我" * 120, full="您好，" + "我" * 300)
+    check("超长被要求压缩", any("篇幅" in w for w in pitch_mod._check(p_long, job_obj, cand, prof)))
+
     print(f"\n{'=' * 46}")
     print(f"通过 {len(PASS)} 项，失败 {len(FAIL)} 项")
     if FAIL:

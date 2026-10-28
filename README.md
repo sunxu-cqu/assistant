@@ -39,17 +39,18 @@
 │   ├── output/<app_id>/      # ir.yaml + resume.typ + resume.pdf
 │   └── resume.db             # 岗位池 / 投递记录 / 状态机 / 匹配缓存
 ├── workspace/
-│   └── projects/             # ★ 你的资料放这里，一个项目一个文件夹
-│       ├── 2024-校园二手交易平台/
-│       └── 2025-社交推荐实验室课题/
+│   ├── projects/             # ★ 你的资料放这里，一个项目一个文件夹
+│   └── samples/              # 两个示例项目，想试跑时复制进 projects/
 ├── resume_assistant/
-│   ├── kb/                   # 文件夹扫描 + 证据抽取
+│   ├── kb/                   # 文件夹扫描 + 证据抽取 + 校对
 │   ├── match/                # 召回 + 精排
-│   ├── compose/              # 模板 + IR 组装
-│   ├── validate/             # 校验闸门
+│   ├── compose/              # 模板 + IR 组装 + 套磁信 + 开场白
+│   ├── validate/             # 校验闸门 + 资格校验
 │   ├── render/               # Typst 渲染
 │   ├── store/                # SQLite
 │   ├── jobs/                 # JD 抓取 + 解析
+│   ├── board.py              # 投递看板
+│   ├── doctor.py             # 环境自检
 │   ├── pipeline.py           # 编排层（MCP 与 CLI 共用）
 │   ├── mcp_server.py         # MCP 入口
 │   └── cli.py                # CLI 入口
@@ -113,6 +114,12 @@ workspace/projects/2024-某项目/
 ```
 
 支持格式：`.md .txt .pdf .docx .pptx .xlsx .csv .json .yaml`
+
+`workspace/projects/` 默认是空的。想先看看效果，把示例复制过来试跑（跑通后记得删掉再放自己的，否则示例项目会和你的真实经历一起抢简历上的位置）：
+
+```bash
+cp -r workspace/samples/2024-校园二手交易平台 workspace/projects/
+```
 
 两个容易踩的坑，已经处理好了：
 
@@ -196,6 +203,7 @@ workspace/projects/2024-某项目/
 ./.venv/Scripts/python.exe -m resume_assistant.cli match job_xxx
 ./.venv/Scripts/python.exe -m resume_assistant.cli gen job_xxx --template academic
 ./.venv/Scripts/python.exe -m resume_assistant.cli letter job_xxx     # 保研套磁信
+./.venv/Scripts/python.exe -m resume_assistant.cli pitch job_xxx      # 实习开场白（站内信 + 邮件）
 ```
 
 产物：`data/output/<app_id>/resume.pdf`（另有 `ir.yaml` 和 `resume.typ`，都可手改后重新编译）。
@@ -296,6 +304,7 @@ WorkBuddy 的配置文件是 `~/.workbuddy-ai/mcp.json`。写完后需要在连�
 | `resume_preview` | 只出 IR 不渲染，快速看结构 |
 | `resume_rerender` | 手改 ir.yaml 后重新出 PDF（不调模型） |
 | `cover_letter_generate` | 保研套磁信（Markdown，仅 baoyan 岗位） |
+| `pitch_generate` | 实习开场白（站内信 + 邮件两版，仅 internship 岗位） |
 | `template_list` | 模板列表 |
 | `app_list` / `app_detail` / `app_advance` | 投递记录与状态机 |
 | `app_timeline` | 状态流转历史 |
@@ -386,6 +395,36 @@ draft → matched → composed → sent → screening → interview → offer
 
 ---
 
+## 实习开场白
+
+保研有套磁信，实习却没有对称的东西。真正要写的是站内信那两句话、或邮件正文那两百字——看着比简历简单，其实最容易翻车：
+
+```bash
+./.venv/Scripts/python.exe -m resume_assistant.cli pitch job_xxx
+```
+
+一次生成两版，因为长度限制是真实存在的：
+
+| 版本 | 上限 | 用在哪 |
+|---|---|---|
+| `short` | 80 字 | 站内信 / 打招呼，一屏就截断 |
+| `full` | 220 字 | 邮件正文，三段：自我介绍 / 最对口的 1-2 段经历 / 可实习时间与联系方式 |
+
+四条检查，前两条会自动带反馈重写一次：
+
+| 检查 | 触发条件 |
+|---|---|
+| 可实习时间编造 | `profile.yaml` 的 `internship_available` 为空，正文却出现「每周 4 天」「可实习 6 个月」 |
+| 数字无出处 | 正文里的数字在证据、指标、JD、profile 里都找不到 |
+| 空话 | 「贵司平台广阔」「非常期待加入」这类删掉后信息量不变的句子 |
+| 篇幅 | 站内信 > 90 字，或邮件 > 260 字 |
+
+**为什么专门盯「可实习时间」**：这是模型最爱顺手补的一句，也是面试第一句就会被追问的内容。`profile.yaml` 里留空，它就不许写；要写就先把真实时间填上。
+
+产物 `data/output/<app_id>/pitch.md`，两版并列，直接复制粘贴。
+
+---
+
 ## 模板
 
 `resume_assistant/render/templates/*.yaml` 定义版式与槽位（section 顺序、条目上限、每条 bullet 数）。
@@ -442,7 +481,7 @@ draft → matched → composed → sent → screening → interview → offer
 五个脚本，前三个不消耗 API 额度：
 
 ```bash
-# 全链路冒烟（87 项断言：资料接入→知识库→匹配→组稿→校验→渲染→状态机→校对→看板）
+# 全链路冒烟（95 项断言：资料接入→知识库→匹配→组稿→校验→渲染→状态机→校对→看板→开场白）
 set RESUME_ASSISTANT_MOCK=1
 ./.venv/Scripts/python.exe tests/smoke.py
 
@@ -491,7 +530,8 @@ set RESUME_ASSISTANT_MOCK=1
 | 双线状态机（保研 / 实习，含非法转移拒绝） | 通过 |
 | 硬性资格校验（届别 / 学历 / 专业） | 通过 |
 | 套磁信（称呼不叠字、不虚构附件、不编造论文） | 通过 |
-| MCP stdio 握手 + 22 个工具 | 通过 |
+| 实习开场白（长度上限、可实习时间不许编、空话识别） | 通过 |
+| MCP stdio 握手 + 23 个工具 | 通过 |
 
 真实 API 端到端跑通 5 个岗位（3 实习 + 2 保研），简历全部 0 错误生成，2 封套磁信 0 编造风险。
 

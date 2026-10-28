@@ -3,7 +3,7 @@
 跑法：
     ./.venv/Scripts/python.exe tests/e2e_real.py
 
-流程：10 个刁难资料 → 抽取 → 5 个岗位（3 实习 + 2 保研）→ 匹配 → 简历 → 套磁信 → 状态机
+流程：10 个刁难资料 → 抽取 → 5 个岗位（3 实习 + 2 保研）→ 匹配 → 简历 → 套磁信 → 开场白 → 状态机
 """
 
 from __future__ import annotations
@@ -45,6 +45,11 @@ def main() -> int:
     t0 = time.time()
     (SANDBOX / "data").mkdir(parents=True, exist_ok=True)
     shutil.copy(ROOT / "data" / "profile.example.yaml", SANDBOX / "data" / "profile.yaml")
+
+    # 岗位与投递编号现在是内容指纹（同一份 JD 得到同一个 id），
+    # 不清库的话上一轮跑完的记录会停在 offer，这一轮状态机从终点出发必然非法转移。
+    # 证据缓存存在 data/evidence/ 里，删库不会重抽，不额外烧 token。
+    (SANDBOX / "data" / "resume.db").unlink(missing_ok=True)
 
     # ---------------------------------------------------------------- 知识库
     hr("1. 知识库构建（10 个刁难资料）")
@@ -178,8 +183,39 @@ def main() -> int:
         print(f"   已保存：{cl['path']}")
         letters.append(cl)
 
+    # ------------------------------------------------------------- 开场白
+    hr("7. 实习开场白（仅实习）")
+    for job_id, kind, title in job_ids:
+        if kind != "internship":
+            r = pipeline.generate_pitch(job_id)
+            print(f"  {'ok ' if not r.get('ok') else 'FAIL'} 保研岗位被拒绝：{r.get('error')}")
+            continue
+        t = time.time()
+        try:
+            g = pipeline.generate_pitch(job_id, max_retry=1)
+        except Exception:  # noqa: BLE001
+            print(f"  EXCEPTION {title}")
+            traceback.print_exc()
+            continue
+        if not g.get("ok"):
+            print(f"  FAIL {title} ({time.time() - t:.1f}s): {g.get('error')}")
+            continue
+        cc = g["char_count"]
+        print(f"\n【{title}】{time.time() - t:.1f}s | 站内信 {cc['short']} 字 / 邮件 {cc['full']} 字")
+        print(f"   站内信：{g['pitch']['short']}")
+        print(f"   邮件首段：{g['pitch']['full'].splitlines()[0]}")
+        if g["warnings"]:
+            for w in g["warnings"]:
+                print(f"   ⚠ {w}")
+        else:
+            print("   ok 无编造风险警告")
+        assert cc["short"] <= 90, f"站内信过长: {cc['short']}"
+        for bad in ("成绩单", "推荐信", "作品集"):
+            assert bad not in g["pitch"]["short"] + g["pitch"]["full"], f"虚构附件: {bad}"
+        print(f"   已保存：{g['path']}")
+
     # ---------------------------------------------------------------- 状态机
-    hr("7. 状态机全流程")
+    hr("8. 状态机全流程")
     for app_id, kind, title, _ in apps:
         line = ["sent"]
         if kind == "baoyan":

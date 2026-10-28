@@ -276,6 +276,16 @@ def cover_letter_generate(job_id: str) -> dict:
 
 
 @mcp.tool()
+def pitch_generate(job_id: str) -> dict:
+    """实习投递开场白：站内信（≤80 字）+ 邮件正文（≤220 字）两版。
+
+    只适用于 kind=internship 的岗位；保研请用 cover_letter_generate。
+    所有数字必须能在知识库或 JD 里找到出处，可实习时间只能来自 profile.yaml。
+    """
+    return _safe(pipeline.generate_pitch, job_id=job_id)
+
+
+@mcp.tool()
 def template_list() -> dict:
     """列出可用简历模板。single_column 适合实习网申，academic 适合保研套磁。"""
     return _safe(lambda: {"ok": True, "items": pipeline.all_templates()})

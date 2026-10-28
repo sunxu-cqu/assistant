@@ -59,6 +59,9 @@ class Profile(BaseModel):
     education: list[Education] = Field(default_factory=list)
     skills: Skills = Field(default_factory=Skills)
     summary: str = ""
+    # 可实习时间（如「2026.01 起，每周 4 天，可实习 6 个月」）。
+    # 空着就是空着——开场白里不许编，编了面试第一句就被问穿。
+    internship_available: str = ""
 
 
 # --------------------------------------------------------------- Evidence
@@ -304,6 +307,29 @@ class CoverLetter(BaseModel):
 
     def word_count(self) -> int:
         return len([c for c in self.body if not c.isspace()])
+
+
+class Pitch(BaseModel):
+    """实习投递开场白。
+
+    两个长度是真实场景逼出来的：站内信（Boss 直聘那类）只能塞下一句话，
+    邮件正文可以写到两百字。一次生成两版，省得投的时候现删。
+    """
+
+    job_id: str
+    short: str = ""      # 站内信 / 打招呼
+    full: str = ""       # 邮件正文
+    evidence_ids: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    path: str = ""
+    generated_at: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
+
+    @staticmethod
+    def _count(text: str) -> int:
+        return len([c for c in (text or "") if not c.isspace()])
+
+    def char_count(self) -> dict[str, int]:
+        return {"short": self._count(self.short), "full": self._count(self.full)}
 
 
 # ------------------------------------------------------------- 工具函数
