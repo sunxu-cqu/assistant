@@ -10,10 +10,11 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from pydantic import ValidationError
 
 from .compose.ir import compose
 from .compose.templates import load_template, list_templates
-from .config import APPS_DIR, DATA, JOBS_DIR, OUTPUT_DIR, PROFILE_PATH, ensure_dirs
+from .config import APPS_DIR, DATA, JOBS_DIR, OUTPUT_DIR, PROFILE_PATH, ConfigError, ensure_dirs
 from .kb.builder import build_all, load_all_evidence
 from .llm import get_llm
 from .match.rank import match_job
@@ -33,10 +34,27 @@ from .validate.linter import lint
 
 
 def load_profile() -> Profile:
-    if PROFILE_PATH.exists():
-        raw = yaml.safe_load(PROFILE_PATH.read_text(encoding="utf-8")) or {}
+    if not PROFILE_PATH.exists():
+        return Profile()
+    raw_text = PROFILE_PATH.read_text(encoding="utf-8")
+    try:
+        raw = yaml.safe_load(raw_text) or {}
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        where = f"第 {mark.line + 1} 行" if mark is not None else ""
+        problem = getattr(exc, "problem", None) or str(exc).splitlines()[0]
+        raise ConfigError(f"{PROFILE_PATH} 格式有误{('（' + where + '）') if where else ''}：{problem}") from exc
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{PROFILE_PATH} 应该是一个键值对（YAML 字典），现在读到的是 {type(raw).__name__}")
+    try:
         return Profile(**raw)
-    return Profile()
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        field = ".".join(str(x) for x in first.get("loc", ())) or "（整体）"
+        raise ConfigError(
+            f"{PROFILE_PATH} 字段「{field}」类型不对：{first.get('msg', '')}。"
+            "数字和日期请加引号，例如 period: \"2022-09 ~ 2026-06\""
+        ) from exc
 
 
 # ------------------------------------------------------------------- 知识库
@@ -105,15 +123,21 @@ def scan_report() -> dict[str, Any]:
 
 
 def knowledge_stats() -> dict[str, Any]:
+    from .kb.builder import broken_evidence_files
+
     evs = load_all_evidence()
     kinds: dict[str, int] = {}
     for e in evs:
         kinds[e.kind] = kinds.get(e.kind, 0) + 1
+    broken = broken_evidence_files()
     return {
         "evidence_count": len(evs),
         "by_kind": kinds,
         "total_metrics": sum(len(e.metrics) for e in evs),
         "missing_source_metrics": sum(1 for e in evs for m in e.metrics if m.source in ("", "未标注")),
+        # 读不出来的证据文件：这些条目不会出现在任何简历里，必须让用户看见
+        "broken_files": broken,
+        "hint": f"{len(broken)} 个证据文件有问题，这些条目不会被用上" if broken else None,
     }
 
 
@@ -178,7 +202,17 @@ def add_job(
     from .jobs.fetcher import FetchBlocked, fetch_jd_text, make_job
     from .jobs.parser import parse_job
 
-    kind_enum = JobKind(kind)
+    try:
+        kind_enum = JobKind(kind)
+    except ValueError:
+        # 直接 JobKind(kind) 抛的 ValueError 一路穿到 CLI，用户看到的是
+        # 「'实习' is not a valid JobKind」加一屏堆栈，而不是「请用 internship」
+        return {
+            "ok": False,
+            "stage": "input",
+            "error": f"kind 只能是 baoyan（保研）或 internship（实习），收到「{kind}」",
+            "hint": "保研套磁用 baoyan，实习投递用 internship",
+        }
     source = JobSource.MANUAL
     text = raw_text.strip()
 
@@ -359,7 +393,17 @@ def generate_resume(
         report = match_job(job, evs, llm=get_llm())
         db.save_match(report)
 
-    template = load_template(template_key)
+    template = None
+    try:
+        template = load_template(template_key)
+    except FileNotFoundError:
+        keys = "、".join(t["key"] for t in list_templates()) or "（无）"
+        return {
+            "ok": False,
+            "stage": "template",
+            "error": f"模板不存在：{template_key}",
+            "hint": f"可用模板：{keys}",
+        }
     llm = get_llm()
 
     ir: ResumeIR | None = None
@@ -477,7 +521,13 @@ def generate_letter(job_id: str, max_retry: int = 1) -> dict[str, Any]:
 
 def advance(app_id: str, to_status: str, note: str = "") -> dict[str, Any]:
     try:
-        app = db.transition(app_id, AppStatus(to_status), note)
+        target = AppStatus(to_status)
+    except ValueError:
+        # 原样透传的话，中文用户看到的是 "'已投递' is not a valid AppStatus"
+        valid = "、".join(s.value for s in AppStatus)
+        return {"ok": False, "error": f"状态只能是：{valid}（收到「{to_status}」）"}
+    try:
+        app = db.transition(app_id, target, note)
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": str(exc)}
     return {"ok": True, "application": app.model_dump(mode="json"), "timeline": db.app_timeline(app_id)}

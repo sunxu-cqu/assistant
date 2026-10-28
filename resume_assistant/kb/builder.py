@@ -424,19 +424,38 @@ def _collect(report: dict[str, Any], folder: ProjectFolder, items: list[Evidence
         report["created"].append({"folder": folder.name, "count": len(items), "ids": [i.id for i in items]})
 
 
-def load_all_evidence() -> list[Evidence]:
+def _iter_evidence() -> tuple[list[Evidence], list[dict[str, str]]]:
+    """返回 (可用证据, 坏掉的文件与条目)。
+
+    以前这里是两处 `except: continue`——一个字段写错，那条证据就凭空消失，
+    简历上只是「少了一个项目」，没人会想到是 YAML 坏了。现在把问题收集起来，
+    由 kb stats / doctor 报给用户。
+    """
     out: list[Evidence] = []
+    broken: list[dict[str, str]] = []
     for path in sorted(EVIDENCE_DIR.glob("*.yaml")):
         try:
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            broken.append({"file": path.name, "error": f"YAML 解析失败：{str(exc).splitlines()[0]}"})
             continue
-        for item in data.get("items", []):
+        for idx, item in enumerate(data.get("items", []) or []):
             try:
                 out.append(Evidence(**item))
-            except Exception:  # noqa: BLE001
-                continue
-    return out
+            except Exception as exc:  # noqa: BLE001
+                broken.append(
+                    {"file": path.name, "error": f"第 {idx + 1} 条字段非法：{str(exc).splitlines()[0]}"}
+                )
+    return out, broken
+
+
+def load_all_evidence() -> list[Evidence]:
+    return _iter_evidence()[0]
+
+
+def broken_evidence_files() -> list[dict[str, str]]:
+    """读不出来 / 字段非法的证据文件。doctor 与 kb stats 用。"""
+    return _iter_evidence()[1]
 
 
 def update_evidence(evidence_id: str, **fields: Any) -> dict[str, Any]:

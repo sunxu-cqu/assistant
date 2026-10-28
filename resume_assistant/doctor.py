@@ -222,6 +222,19 @@ def _check_evidence() -> Check:
     n = len(list(EVIDENCE_DIR.glob("*.yaml")))
     if n == 0:
         return Check("warn", "知识库为空", "", "跑 kb build 抽取")
+
+    # 坏掉的证据文件不会报错，只会「那条项目从简历上消失了」，必须主动查
+    from .kb.builder import broken_evidence_files
+
+    broken = broken_evidence_files()
+    if broken:
+        detail = "；".join(f"{b['file']}：{b['error']}" for b in broken[:3])
+        return Check(
+            "fail",
+            f"{len(broken)} 个证据文件读不出来",
+            detail,
+            "修好这些 YAML，或删掉后跑 kb build --force 重抽；这些条目现在不会被任何简历用上",
+        )
     return Check("ok", f"已有 {n} 个项目的证据")
 
 

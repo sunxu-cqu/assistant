@@ -165,7 +165,7 @@ def kb_fix(
     evidence_id: str,
     kind: str = typer.Option("", "--kind", "-k", help="research / intern / project / course / award / other"),
     period: str = typer.Option("", "--period", "-p", help="例如 2024.03 ~ 2024.06"),
-    weight: float = typer.Option(0.0, "--weight", "-w", help="0~1，越大越容易被选中"),
+    weight: float = typer.Option(None, "--weight", "-w", help="0~1，越大越容易被选中；0 表示基本不用"),
     title: str = typer.Option("", "--title", "-t"),
     role: str = typer.Option("", "--role", "-r"),
     claim: str = typer.Option("", "--claim", "-c", help="一句话描述"),
@@ -175,7 +175,8 @@ def kb_fix(
         evidence_id,
         kind=kind or None,
         period=period or None,
-        weight=weight or None,
+        # 不能写 `weight or None`：0 是合法值（等于「别用这条」），会被当成没传
+        weight=weight,
         title=title or None,
         role=role or None,
         claim=claim or None,
@@ -202,19 +203,28 @@ def job_add(
     """新增投递目标（手动粘贴或官网抓取）。"""
     raw = text
     if file:
-        raw = Path(file).read_text(encoding="utf-8")
-    _out(
-        pipeline.add_job(
-            kind=kind,
-            raw_text=raw,
-            url=url,
-            title=title,
-            org=org,
-            mentor=mentor,
-            location=location,
-            deadline=deadline,
-        )
+        p = Path(file)
+        if not p.exists():
+            typer.echo(f"文件不存在：{p}", err=True)
+            raise typer.Exit(1)
+        # JD 从浏览器另存下来常常是 GBK，直接 read_text(utf-8) 会抛 UnicodeDecodeError
+        from .kb.scanner import decode_bytes
+
+        raw = decode_bytes(p.read_bytes())[0]
+    res = pipeline.add_job(
+        kind=kind,
+        raw_text=raw,
+        url=url,
+        title=title,
+        org=org,
+        mentor=mentor,
+        location=location,
+        deadline=deadline,
     )
+    _out(res)
+    if not res.get("ok"):
+        # 脚本里靠退出码判断成败，失败却 exit 0 等于骗人
+        raise typer.Exit(1)
 
 
 @job_app.command("list")
@@ -431,7 +441,14 @@ def main() -> None:
         sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
     except Exception:  # noqa: BLE001
         pass
-    app()
+    from .config import ConfigError
+
+    try:
+        app()
+    except ConfigError as exc:
+        # 「profile.yaml 第 3 行少了缩进」这种问题，堆栈一点帮助都没有
+        typer.secho(f"\n配置有问题：{exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
 
 
 if __name__ == "__main__":

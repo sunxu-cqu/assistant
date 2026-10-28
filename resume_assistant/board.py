@@ -143,6 +143,7 @@ def collect(today: date | None = None, now: datetime | None = None) -> dict[str,
     now = now or datetime.now()
     items: list[dict[str, Any]] = []
 
+    reached_map = db.status_history_map()
     for app in db.list_applications():
         job = db.get_job(app.job_id)
         status = app.status.value
@@ -205,6 +206,8 @@ def collect(today: date | None = None, now: datetime | None = None) -> dict[str,
                 "next": ACTION.get(status, ""),
                 "allowed": _allowed(app.kind, app.status),
                 "pdf": app.snapshot.pdf_path,
+                # 到达过哪些状态（漏斗用这个，不用当前状态倒推）
+                "reached": sorted(reached_map.get(app.id, {status})),
                 "alerts": alerts,
             }
         )
@@ -245,11 +248,16 @@ def _funnel(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         if not rows:
             continue
         total = len(rows)
-        sent = sum(1 for it in rows if it["status"] not in {"draft", "matched", "composed"})
-        replied = sum(1 for it in rows if it["status"] in {"replied", "meeting", "interview", "offer"})
-        interviewed = sum(1 for it in rows if it["status"] in {"meeting", "interview", "offer"})
-        offers = sum(1 for it in rows if it["status"] == "offer")
-        rejected = sum(1 for it in rows if it["status"] == "rejected")
+        # 用「到达过」而不是「当前状态」：draft 直接 withdrawn 的记录从没投出去过，
+        # 按当前状态看却已经离开待办，会被错算成一次投递
+        def reached(it: dict[str, Any], *names: str) -> bool:
+            return bool(set(it["reached"]) & set(names))
+
+        sent = sum(1 for it in rows if reached(it, "sent", "screening", "replied", "meeting", "interview", "offer", "rejected"))
+        replied = sum(1 for it in rows if reached(it, "replied", "meeting", "interview", "offer"))
+        interviewed = sum(1 for it in rows if reached(it, "meeting", "interview", "offer"))
+        offers = sum(1 for it in rows if reached(it, "offer"))
+        rejected = sum(1 for it in rows if reached(it, "rejected"))
 
         def pct(a: int, b: int) -> str:
             return f"{a / b:.0%}" if b else "—"

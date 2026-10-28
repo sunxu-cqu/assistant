@@ -28,6 +28,9 @@ SKIP_DIRS = {".git", "__pycache__", ".venv", "node_modules", ".idea", ".vscode"}
 MAX_PDF_PAGES = 40
 MAX_SHEET_ROWS = 300
 MAX_FILES_PER_FOLDER = 80
+# 单个文件超过这个大小直接跳过：实验数据集、录屏、模型权重都会塞进项目文件夹，
+# 读进来既慢又是噪声（模型看到 5 万行 CSV 只会晕）
+MAX_FILE_MB = 20
 
 
 @dataclass
@@ -187,6 +190,15 @@ def _read_xlsx(path: Path) -> tuple[str, str]:
 def read_file(path: Path) -> tuple[str, str, str]:
     """返回 (文本, 编码, 跳过原因)。跳过原因非空表示这个文件没读到内容。"""
     suffix = path.suffix.lower()
+    try:
+        size_mb = path.stat().st_size / (1024 * 1024)
+        if size_mb > MAX_FILE_MB:
+            return "", "", (
+                f"文件 {size_mb:.0f}MB，超过 {MAX_FILE_MB}MB 上限，"
+                "多半是数据集/录屏，读进来也是噪声；有结论请写进 md"
+            )
+    except OSError as exc:
+        return "", "", f"无法读取文件信息：{type(exc).__name__}"
     try:
         if suffix in TEXT_SUFFIXES:
             return _read_text_file(path)

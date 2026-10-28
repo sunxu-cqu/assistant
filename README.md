@@ -478,12 +478,15 @@ draft → matched → composed → sent → screening → interview → offer
 
 ## 自测
 
-五个脚本，前三个不消耗 API 额度：
+六个脚本，只有最后一个消耗 API 额度：
 
 ```bash
 # 全链路冒烟（96 项断言：资料接入→知识库→匹配→组稿→校验→渲染→状态机→校对→看板→开场白）
 set RESUME_ASSISTANT_MOCK=1
 ./.venv/Scripts/python.exe tests/smoke.py
+
+# 边界测试（69 项断言：非法输入 / 损坏 YAML / 并发 / 超大文件 / CLI 退出码）
+./.venv/Scripts/python.exe tests/edge_cases.py
 
 # MCP 协议握手（initialize / tools/list / tools/call）
 ./.venv/Scripts/python.exe tests/test_mcp.py
@@ -531,6 +534,10 @@ set RESUME_ASSISTANT_MOCK=1
 | 硬性资格校验（届别 / 学历 / 专业） | 通过 |
 | 套磁信（称呼不叠字、不虚构附件、不编造论文） | 通过 |
 | 实习开场白（长度上限、可实习时间不许编、空话识别） | 通过 |
+| 边界：非法 kind / 非法状态名 / 未知模板都返回结构化错误，不抛堆栈 | 通过 |
+| 边界：损坏的 profile.yaml 给出行号，损坏的证据文件被统计并告警 | 通过 |
+| 边界：8 线程并发写备注不丢，并发建档只产生一条 | 通过 |
+| 边界：单文件超 20MB 直接跳过（数据集/录屏读进来只是噪声） | 通过 |
 | MCP stdio 握手 + 23 个工具 | 通过 |
 
 真实 API 端到端跑通 5 个岗位（3 实习 + 2 保研），简历全部 0 错误生成，2 封套磁信 0 编造风险。

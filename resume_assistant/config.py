@@ -23,6 +23,14 @@ PROJECTS_DIR = WORKSPACE / "projects"
 TEMPLATE_DIR = Path(__file__).resolve().parent / "render" / "templates"
 
 
+class ConfigError(RuntimeError):
+    """用户可修复的配置问题（YAML 写坏了、字段类型不对）。
+
+    与普通异常分开：CLI 顶层捕获它只打印一行人话，不打堆栈——
+    堆栈对「profile.yaml 第 3 行少了缩进」没有任何帮助。
+    """
+
+
 def ensure_dirs() -> None:
     for d in (DATA, EVIDENCE_DIR, JOBS_DIR, APPS_DIR, TEMPLATES_DIR, OUTPUT_DIR, PROJECTS_DIR):
         d.mkdir(parents=True, exist_ok=True)

@@ -50,3 +50,9 @@ data/board.html
 
 # 看板演示用沙箱
 tests/sandbox/boardtest/
+
+# 边界测试与临时排查用的沙箱
+tests/sandbox/edge/
+tests/sandbox/badyaml/
+tests/sandbox/noedu/
+tests/sandbox/*.txt

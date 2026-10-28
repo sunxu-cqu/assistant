@@ -146,11 +146,22 @@ def create_application(job: Job) -> Application:
         history=[StatusEvent(status=AppStatus.DRAFT, note="建档")],
     )
     with conn() as c:
-        c.execute(
-            "INSERT INTO applications(id,job_id,kind,status,payload,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
-            (app.id, app.job_id, app.kind.value, app.status.value,
-             json.dumps(app.model_dump(mode="json"), ensure_ascii=False), _now(), _now()),
-        )
+        try:
+            c.execute(
+                "INSERT INTO applications(id,job_id,kind,status,payload,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+                (app.id, app.job_id, app.kind.value, app.status.value,
+                 json.dumps(app.model_dump(mode="json"), ensure_ascii=False), _now(), _now()),
+            )
+        except sqlite3.IntegrityError:
+            # 上面「先查再插」之间存在窗口：两个线程同时给同一个岗位建档时，
+            # 都会查到「没有」，然后都去插入。撞上唯一约束的那个应该返回已有的那条，
+            # 而不是把 IntegrityError 抛给调用方（gen 会因此失败）
+            row = c.execute(
+                "SELECT payload FROM applications WHERE job_id=? ORDER BY created_at DESC LIMIT 1", (job.id,)
+            ).fetchone()
+            if row is None:
+                raise
+            return Application(**json.loads(row["payload"]))
         c.execute(
             "INSERT INTO events(app_id,status,at,note) VALUES(?,?,?,?)",
             (app.id, AppStatus.DRAFT.value, _now(), "建档"),
@@ -229,6 +240,21 @@ def app_timeline(app_id: str) -> list[dict]:
     with conn() as c:
         rows = c.execute("SELECT status, at, note FROM events WHERE app_id=? ORDER BY seq", (app_id,)).fetchall()
     return [dict(r) for r in rows]
+
+
+def status_history_map() -> dict[str, set[str]]:
+    """每条投递「到达过」哪些状态。
+
+    看板的漏斗不能用当前状态倒推：一条 draft 就 withdrawn 的记录，
+    按当前状态看是「已离开待办」，会被错算成「投出去过」。
+    只有 events 表知道它到底有没有真的走到 sent。
+    """
+    with conn() as c:
+        rows = c.execute("SELECT app_id, status FROM events").fetchall()
+    out: dict[str, set[str]] = {}
+    for r in rows:
+        out.setdefault(r["app_id"], set()).add(r["status"])
+    return out
 
 
 def add_note(app_id: str, note: str) -> list[dict]:

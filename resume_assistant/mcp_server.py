@@ -141,7 +141,7 @@ def kb_fix(
     evidence_id: str,
     kind: str = "",
     period: str = "",
-    weight: float = 0.0,
+    weight: float | None = None,
     title: str = "",
     role: str = "",
     claim: str = "",
@@ -150,6 +150,7 @@ def kb_fix(
 
     常见用法：kb_review 发现某条被标成 research，用 kind="course" 改回来；
     或时间写成裸年份，用 period="2024.03 ~ 2024.06" 补全。
+    weight 传 0 是合法的（表示这条基本不用），不传则不动。
     改完会重新校验一遍字段，非法 kind / 越界 weight 会直接报错。
     """
     return _safe(
@@ -157,7 +158,7 @@ def kb_fix(
         evidence_id,
         kind=kind or None,
         period=period or None,
-        weight=weight or None,
+        weight=weight,
         title=title or None,
         role=role or None,
         claim=claim or None,
