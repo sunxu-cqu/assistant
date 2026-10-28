@@ -283,7 +283,7 @@ def main() -> int:
     check("非法 kind 被拒绝", bad_fix.get("ok") is False, str(bad_fix)[:120])
     check("改不存在的证据报错", pipeline.fix_evidence("ev_not_exist", period="x").get("ok") is False)
 
-    print("\n[14] 资料接入（编码 / 格式 / 跳过原因）")
+    print("\n[13] 资料接入（编码 / 格式 / 跳过原因）")
     import codecs
 
     from resume_assistant.kb.scanner import decode_bytes, scan_folder
@@ -320,7 +320,7 @@ def main() -> int:
     check("README 优先读取（截断时不会先砍掉它）", of.files[0] == "README.md", str(of.files))
     shutil.rmtree(order_dir.parent, ignore_errors=True)
 
-    print("\n[15] 幽灵证据（文件夹改名/删除后遗留）")
+    print("\n[14] 幽灵证据（文件夹改名/删除后遗留）")
     from resume_assistant.config import EVIDENCE_DIR
 
     ghost = EVIDENCE_DIR / "_ghost_test.yaml"
@@ -341,6 +341,70 @@ def main() -> int:
     pruned = pipeline.prune_orphan_evidence()
     check("prune 删除幽灵证据", pruned["count"] >= 1 and not ghost.exists(), str(pruned)[:120])
     check("清理后不再报告", not any(o["folder"] == "早就删掉的项目" for o in pipeline.find_orphan_evidence()["items"]))
+
+    print("\n[15] 投递看板与编号唯一性")
+    from datetime import date, datetime
+
+    from resume_assistant import board as board_mod
+    from resume_assistant.jobs.fetcher import make_job
+    from resume_assistant.models import AppStatus, Job, JobKind
+    from resume_assistant.store import db as _db
+
+    T = date(2026, 10, 28)
+    check("解析 2026-11-01", board_mod.parse_deadline("2026-11-01", T) == date(2026, 11, 1))
+    check("解析 11月1日", board_mod.parse_deadline("11月1日", T) == date(2026, 11, 1))
+    check("跨年的月日按下一年算", board_mod.parse_deadline("1月5日", T) == date(2027, 1, 5))
+    check("长期有效不硬猜日期", board_mod.parse_deadline("长期有效", T) is None)
+    check("不存在的日期返回 None", board_mod.parse_deadline("2026-02-30", T) is None)
+
+    # 岗位编号曾经是「单位 + 秒级时间戳」，同一秒加两个同公司岗位会撞 id，
+    # 而 save_job 是 ON CONFLICT UPDATE，后一个会把前一个悄悄覆盖
+    j_a = make_job(kind=JobKind.INTERNSHIP, title="推荐算法", raw_text="同一份 JD", org="某公司")
+    j_b = make_job(kind=JobKind.INTERNSHIP, title="推荐算法", raw_text="同一份 JD", org="某公司")
+    j_c = make_job(kind=JobKind.INTERNSHIP, title="推荐算法", raw_text="另一份 JD", org="某公司")
+    check("同一份 JD 编号稳定", j_a.id == j_b.id, f"{j_a.id} vs {j_b.id}")
+    check("不同 JD 编号不同", j_a.id != j_c.id, f"{j_a.id} vs {j_c.id}")
+
+    def _mk(title: str, deadline: str, kind: JobKind = JobKind.INTERNSHIP):
+        j = Job(id=f"job_board_{title}", kind=kind, title=title, org="某公司", deadline=deadline)
+        _db.save_job(j)
+        return _db.create_application(j)
+
+    a1 = _mk("快截止岗位", "2026-10-30")
+    _db.transition(a1.id, AppStatus.MATCHED)
+    _db.transition(a1.id, AppStatus.COMPOSED)
+    a2 = _mk("投出去很久", "2026-12-01")
+    for st in (AppStatus.MATCHED, AppStatus.COMPOSED, AppStatus.SENT):
+        _db.transition(a2.id, st)
+    _mk("已经过期", "2026-10-01", JobKind.BAOYAN)
+
+    check("投递编号带岗位标题", a1.id.startswith("app_某公司_快截止岗位"), a1.id)
+    check("重复建档返回同一条", _db.create_application(_db.get_job(a1.job_id)).id == a1.id)
+
+    hist_before = len(_db.get_application(a2.id).history)
+    nt = pipeline.note_application(a2.id, "HR 说下周安排一面")
+    check("记一笔成功", nt.get("ok") is True, str(nt)[:120])
+    check(
+        "记一笔只进时间线，不动状态与停留计时",
+        len(_db.get_application(a2.id).history) == hist_before
+        and any(e["note"] == "HR 说下周安排一面" for e in nt["timeline"]),
+    )
+    check("空备注被拒", pipeline.note_application(a2.id, "   ").get("ok") is False)
+
+    bd = board_mod.collect(today=T, now=datetime(2026, 11, 8, 10, 0, 0))
+    flat = {it["title"]: it for it in bd["items"]}
+    check("看板按状态分四栏", len(bd["columns"]) == 4 and sum(c["count"] for c in bd["columns"]) >= 3,
+          str([(c["title"], c["count"]) for c in bd["columns"]]))
+    check("快截止报 error", any(x["level"] == "error" for x in flat["快截止岗位"]["alerts"]), str(flat["快截止岗位"]["alerts"]))
+    check("投出去十天提示跟进", any("没动静" in x["text"] for x in flat["投出去很久"]["alerts"]), str(flat["投出去很久"]["alerts"]))
+    check("截止已过提示", any("已过" in x["text"] for x in flat["已经过期"]["alerts"]), str(flat["已经过期"]["alerts"]))
+    check("有提醒的排前面", bool(bd["items"][0]["alerts"]))
+    check("文本输出含漏斗", "实习：" in board_mod.to_text(bd))
+
+    bp = pipeline.board(write_html=True)
+    check("看板页能生成", bp.get("ok") is True and Path(bp["html_path"]).exists(), str(bp.get("html_path")))
+    html_text = Path(bp["html_path"]).read_text(encoding="utf-8")
+    check("看板页含分栏标题", "待办" in html_text and "已投出" in html_text)
 
     print(f"\n{'=' * 46}")
     print(f"通过 {len(PASS)} 项，失败 {len(FAIL)} 项")

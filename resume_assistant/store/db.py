@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import time
@@ -123,7 +124,20 @@ def list_jobs(kind: JobKind | None = None) -> list[Job]:
 # ------------------------------------------------------------ applications
 
 def create_application(job: Job) -> Application:
-    app_id = f"app_{slugify(job.org or job.mentor or job.title, 16)}_{int(time.time()) % 100000}"
+    """给岗位建档。
+
+    id 里带岗位标题和 job_id 指纹：
+    - 只按单位 + 秒级时间戳编号时，同一秒给同一家公司建两条会撞 UNIQUE 约束
+    - 标题进 id 之后，产物目录名 `app_某公司_推荐算法实习生_a1b2c3` 也能一眼认出是哪个岗位
+
+    函数本身幂等：同一个 job 已经有记录就返回旧的那条，不重复建档。
+    """
+    existing = find_application_by_job(job.id)
+    if existing is not None:
+        return existing
+
+    head = f"{slugify(job.org or job.mentor or job.title, 14)}_{slugify(job.title, 12)}"
+    app_id = f"app_{head}_{hashlib.sha1(job.id.encode('utf-8')).hexdigest()[:6]}"
     app = Application(
         id=app_id,
         job_id=job.id,
@@ -215,6 +229,26 @@ def app_timeline(app_id: str) -> list[dict]:
     with conn() as c:
         rows = c.execute("SELECT status, at, note FROM events WHERE app_id=? ORDER BY seq", (app_id,)).fetchall()
     return [dict(r) for r in rows]
+
+
+def add_note(app_id: str, note: str) -> list[dict]:
+    """给投递记一笔（HR 说了什么、约了几点），不改变状态。
+
+    只写 events 表，不写 history：history 的最后一条被用来算「在这个状态停了几天」，
+    记一笔备注就把计时清零的话，「投出去十天没动静」的提醒永远不会触发。
+    """
+    app = get_application(app_id)
+    if app is None:
+        raise ValueError(f"投递记录不存在：{app_id}")
+    text = (note or "").strip()
+    if not text:
+        raise ValueError("备注不能为空")
+    with conn() as c:
+        c.execute(
+            "INSERT INTO events(app_id,status,at,note) VALUES(?,?,?,?)",
+            (app_id, app.status.value, _now(), text),
+        )
+    return app_timeline(app_id)
 
 
 # ---------------------------------------------------------------- matches

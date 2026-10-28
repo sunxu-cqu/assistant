@@ -11,6 +11,7 @@ JS 渲染的官网 httpx 取不到正文，此时抛 FetchBlocked，引导用户
 
 from __future__ import annotations
 
+import hashlib
 import re
 import time
 from urllib.parse import urlparse
@@ -107,9 +108,18 @@ def make_job(
     source: JobSource = JobSource.MANUAL,
     notes: str = "",
 ) -> Job:
+    """建岗位。
+
+    id 用「单位_内容指纹」而不是时间戳：同一秒里加两个同公司的岗位曾经会撞 id，
+    而 save_job 是 ON CONFLICT UPDATE，表现是后一个把前一个悄悄覆盖掉。
+    换成内容指纹后，重复添加同一份 JD 得到同一个 id（幂等更新），
+    不同 JD 一定不同 id。
+    """
     from ..models import slugify
 
-    jid = f"job_{slugify(org or mentor or title, 20)}_{int(time.time()) % 100000}"
+    head = slugify(org or mentor or title, 18)
+    body = f"{kind.value}|{org}|{mentor}|{title}|{url}|{raw_text[:200]}"
+    jid = f"job_{head}_{hashlib.sha1(body.encode('utf-8')).hexdigest()[:5]}"
     return Job(
         id=jid,
         kind=kind,

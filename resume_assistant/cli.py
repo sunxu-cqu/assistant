@@ -345,6 +345,16 @@ def app_advance(
     typer.echo(f"已推进到 {res['application']['status']}")
 
 
+@app_app.command("note")
+def app_note(app_id: str, note: str) -> None:
+    """给投递记一笔（HR 说了什么、约了几点），不改状态。"""
+    res = pipeline.note_application(app_id, note)
+    if not res.get("ok"):
+        _out(res)
+        raise typer.Exit(1)
+    typer.echo(f"已记录。当前共 {len(res['timeline'])} 条时间线记录")
+
+
 @app_app.command("show")
 def app_show(app_id: str) -> None:
     """查看投递详情与时间线。"""
@@ -358,6 +368,27 @@ def app_show(app_id: str) -> None:
     typer.echo("\n时间线：")
     for e in res["timeline"]:
         typer.echo(f"  {e['at']}  {e['status']:11s} {e['note'] or ''}")
+
+
+@app.command("board")
+def board_cmd(
+    as_json: bool = typer.Option(False, "--json", help="输出 JSON"),
+    html: bool = typer.Option(True, "--html/--no-html", help="是否生成 data/board.html"),
+    open_in_browser: bool = typer.Option(False, "--open", help="生成后用浏览器打开"),
+) -> None:
+    """投递看板：卡在哪一步、谁快截止了、谁投出去太久没动静。"""
+    res = pipeline.board(write_html=html)
+    if as_json:
+        _out(res)
+    else:
+        typer.echo(res["text"])
+        if res.get("html_path"):
+            typer.echo(f"\n看板：{res['html_path']}")
+
+    if open_in_browser and res.get("html_path"):
+        import webbrowser
+
+        webbrowser.open(Path(res["html_path"]).resolve().as_uri())
 
 
 def main() -> None:

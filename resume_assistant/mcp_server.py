@@ -314,6 +314,38 @@ def app_timeline(app_id: str) -> dict:
     return _safe(lambda: {"ok": True, "events": db.app_timeline(app_id)})
 
 
+@mcp.tool()
+def app_note(app_id: str, note: str) -> dict:
+    """给某条投递记一笔（HR 说了什么、约了几点），不改变状态。
+
+    只进时间线，不影响「在这个状态停留了几天」的计算。
+    """
+    return _safe(pipeline.note_application, app_id=app_id, note=note)
+
+
+@mcp.tool()
+def app_board(html: bool = True) -> dict:
+    """投递看板：每个岗位卡在哪一步、谁快截止、谁投出去太久没动静。
+
+    返回 text（可直接展示给人看）与结构化的 funnel / alerts。
+    html=True 时同时写出 data/board.html。
+    """
+    res = _safe(pipeline.board, write_html=html)
+    if not res.get("ok"):
+        return res
+    return {
+        "ok": True,
+        "text": res["text"],
+        "html_path": res.get("html_path", ""),
+        "funnel": res["funnel"],
+        "alerts": [
+            {"app_id": it["app_id"], "title": it["title"], "status": it["status"],
+             "alerts": it["alerts"]}
+            for it in res["alerts"]
+        ],
+    }
+
+
 def main() -> None:
     try:
         sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]

@@ -510,5 +510,23 @@ def get_application(app_id: str) -> dict[str, Any]:
     }
 
 
+def note_application(app_id: str, note: str) -> dict[str, Any]:
+    """给投递记一笔，不改状态。"""
+    try:
+        tl = db.add_note(app_id, note)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True, "timeline": tl}
+
+
+def board(write_html: bool = True, today: Any = None) -> dict[str, Any]:
+    """投递看板。纯规则汇总，不调模型。"""
+    from .board import build, to_text
+
+    data = build(html=write_html, today=today)
+    data["text"] = to_text(data)
+    return data
+
+
 def all_templates() -> list[dict[str, str]]:
     return list_templates()
