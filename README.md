@@ -271,7 +271,37 @@ cp -r workspace/samples/2024-校园二手交易平台 workspace/projects/
 备注只进时间线。如果它进了 `history`，最后一条时间戳就会被刷新，
 「投出去十天没动静」的提醒永远不会触发。
 
-### 10. 图形界面（可选）
+### 10. VSCode 扩展（推荐）
+
+装进编辑器，不用切窗口。数据全来自本机知识库，不联网。
+
+```bash
+cd vscode-extension
+npx --yes @vscode/vsce package --no-dependencies --allow-missing-repository
+code --install-extension resume-assistant-0.1.0.vsix
+```
+
+然后在 VSCode 里打开简历助手所在文件夹（要能看到 `data/` 和 `workspace/`）：
+
+| 入口 | 用途 |
+|---|---|
+| 左侧活动栏「简历助手」 | 侧栏窄条：必须处理 / 待办 / 等回复，点卡片直接生成简历 |
+| 命令 `简历助手：打开完整看板` | 四栏看板 + 岗位池 + 知识库校对 + 环境自检 |
+| 命令 `简历助手：环境自检` | 结果进「输出」面板的「简历助手」频道 |
+| 状态栏 | 有必须处理的投递时显示 `⚠ 简历助手 N` |
+
+**架构上只有一个选择值得说**：插件里不写一行业务逻辑，全部走 MCP 工具。
+
+```
+VSCode 扩展 ──MCP(stdio)──▶ python -m resume_assistant.mcp_server ──▶ pipeline.py
+本地网页    ──HTTP───────▶ web/server.py ──overview()──────────────▶ pipeline.py
+终端        ──CLI────────▶ cli.py ─────────────────────────────────▶ pipeline.py
+```
+
+三个客户端共用同一份 `overview()`（`resume_assistant/overview.py`）。谁要是自己拼字段，
+迟早出现「网页上有、插件里 undefined」——这种 bug 接口返回 200，最难查。
+
+### 11. 本地网页（可选，不装 VSCode 也能用）
 
 命令行能做完所有事，但「这周该做什么」用眼睛看比读文本快。
 
@@ -345,6 +375,7 @@ WorkBuddy 的配置文件是 `~/.workbuddy-ai/mcp.json`。写完后需要在连�
 | `app_timeline` | 状态流转历史 |
 | `app_note` | 记一笔备注（不改状态，只进时间线） |
 | `app_board` | 投递看板：卡点、截止提醒、跟进提醒 |
+| `ui_overview` | 界面首屏数据一次拿全（插件与网页共用，避免各拼一遍字段） |
 
 接了 MCP 之后，你可以直接对 agent 说：
 
@@ -498,7 +529,7 @@ draft → matched → composed → sent → screening → interview → offer
 | OCR 要另装 | 默认读不到扫描件；装 `rapidocr-onnxruntime` 才识别 | 已支持，见「装依赖」 |
 | 老版 Office | `.doc` / `.xls` / `.ppt` 打不开，需另存为新格式（会提示） | 不打算支持，二进制格式太脆 |
 | 抓取能力弱 | JS 渲染页取不到正文，会引导改手动粘贴 | 视需要接 Playwright |
-| 界面是本地网页 | 不是 VSCode 扩展，`resume ui` 起一个本地服务（只绑 127.0.0.1） | 需要的话可以再包一层 Webview |
+| 界面 | 有 VSCode 扩展（活动栏 + 四栏看板）和一个本地网页兜底；不是 JetBrains 插件 | 需要的话再包一层 |
 | 单语言 | 只支持中文 | — |
 
 ---
@@ -531,6 +562,12 @@ set RESUME_ASSISTANT_MOCK=1
 
 # 界面层（页面能开 / 数据能拿 / 动作能执行 / 越界访问被挡 / 前端渲染 53 项）
 ./.venv/Scripts/python.exe tests/web_smoke.py
+
+# VSCode 扩展（30 项：清单 / 激活 / 视图 HTML / 真实 MCP 调用 / 错误路径）
+node tests/vscode_smoke.js
+
+# VSCode 扩展的 webview（36 项：四视图渲染 / 点击→工具名映射 / 路径转义）
+node tests/vscode_render.js
 
 # 模板排版预览（假数据渲染两套模板，产出 data/output/_preview/*.pdf）
 ./.venv/Scripts/python.exe tests/preview_template.py
@@ -595,6 +632,8 @@ set RESUME_ASSISTANT_MOCK=1
 | OCR：没装时给出启用方法；装了就按页识别（用假引擎验证过整条链路） | 通过 |
 | 本地界面：页面能开、数据能拿、动作能执行、越界访问被挡、8 并发稳定 | 通过 |
 | 前端渲染：不开浏览器跑内联脚本，有告警 / 有截止 / 有 PDF / OCR 开关两种状态都渲染正确 | 通过 |
+| VSCode 扩展：桩掉 vscode 模块，激活 / 视图 HTML / 真实 MCP 调用 / 错误路径 30 项 | 通过 |
+| 扩展 webview：四视图渲染 + 点击发出去的工具名与参数 + Windows 路径转义 36 项 | 通过 |
 
 真实 API 端到端跑通 5 个岗位（3 实习 + 2 保研），简历全部 0 错误生成，2 封套磁信 0 编造风险。
 另有一组「像真人资料」的 8 个文件夹（多文件项目 / 备份文件夹 / docx 表格 / 6MB 日志 / 25MB csv / 扫描件 / GBK 笔记）跑通全流程：8 条证据，实习 1 页、保研 1 页，均 0 错误。

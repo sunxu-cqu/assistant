@@ -31,46 +31,11 @@ UI_PATH = Path(__file__).resolve().parent / "ui.html"
 
 
 # ------------------------------------------------------------------ 数据组装
+#
+# 组装逻辑在 resume_assistant/overview.py：网页、VSCode 插件（走 MCP 的
+# ui_overview）、harness 共用同一份，字段名不会各写一遍然后分叉。
 
-
-def overview() -> dict[str, Any]:
-    """首屏要的全部数据，一次拿完。"""
-    from .. import doctor as doctor_mod
-    from ..match import embed
-
-    board = pipeline.board(write_html=False)
-    kb = pipeline.knowledge_stats()
-    jobs = pipeline.list_jobs()
-    apps = pipeline.list_applications()
-
-    profile: dict[str, Any] = {"ok": False}
-    try:
-        p = pipeline.load_profile()
-        profile = {
-            "ok": True,
-            "name": p.name,
-            "school": p.education[0].school if p.education else "",
-            "major": p.education[0].major if p.education else "",
-            "degree": p.education[0].degree if p.education else "",
-            "gpa": p.education[0].gpa if p.education else "",
-            "rank": p.education[0].gpa_rank if p.education else "",
-            "internship_available": p.internship_available,
-            "example": (p.name or "") in ("张三", "李四", "王五"),
-        }
-    except Exception as exc:  # noqa: BLE001
-        profile = {"ok": False, "error": str(exc)[:200]}
-
-    return {
-        "ok": True,
-        "board": board,
-        "kb": kb,
-        "jobs": jobs,
-        "apps": apps,
-        "profile": profile,
-        "templates": pipeline.all_templates(),
-        "doctor": doctor_mod.run(),
-        "embed": embed.info(),
-    }
+from ..overview import overview  # noqa: E402  (re-export，保持旧调用方式可用)
 
 
 # ------------------------------------------------------------------ 路由表

@@ -35,6 +35,7 @@ EXPECTED_TOOLS = {
     "cover_letter_generate", "pitch_generate", "template_list",
     "app_list", "app_detail", "app_advance", "app_timeline", "app_note",
     "app_board",
+    "ui_overview",
 }
 
 PASS: list[str] = []

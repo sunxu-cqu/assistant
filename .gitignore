@@ -38,3 +38,6 @@ data/board.html
 tests/sandbox/*
 !tests/sandbox/workspace/
 !tests/sandbox/workspace/**/*.pdf
+
+# 扩展打包产物（可重建：npm run package）
+*.vsix

@@ -13,7 +13,7 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer as _Server
 
-from . import pipeline
+from . import overview, pipeline
 
 mcp = _Server("简历助手")
 
@@ -368,6 +368,16 @@ def app_board(html: bool = True) -> dict:
             for it in res["alerts"]
         ],
     }
+
+
+@mcp.tool()
+def ui_overview() -> dict:
+    """界面首屏要的全部数据，一次拿完（看板 / 知识库 / 岗位 / 投递 / 档案 / 模板 / 自检）。
+
+    VSCode 插件和本地网页都调这个，不再各自拼字段——拼两遍必然分叉，
+    然后出现「网页上有、插件里 undefined」这种最难查的 bug。
+    """
+    return _safe(overview.overview)
 
 
 def main() -> None:
