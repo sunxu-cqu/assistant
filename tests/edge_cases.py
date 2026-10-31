@@ -397,6 +397,84 @@ def main() -> int:
     check("字段类型不对时指出是哪个字段", bool(err) and "gpa" in err, str(err))
     pf.write_text(backup, encoding="utf-8")
 
+    # -------------------------------------------------- 11 闸门与文案的边界
+    print("\n[11] 数字闸门与文案兜底")
+    from resume_assistant.kb.builder import load_all_evidence
+    from resume_assistant.models import Bullet, IREntry, IRSection, ResumeIR
+    from resume_assistant.validate.linter import lint
+
+    evs = load_all_evidence()
+    prof = pipeline.load_profile()
+
+    def _one(text: str) -> list[str]:
+        ir = ResumeIR(
+            job_id="j",
+            template="single_column",
+            contact={"name": prof.name or "张三"},
+            sections=[
+                IRSection(
+                    type="projects",
+                    title="项目经历",
+                    entries=[IREntry(heading="推荐系统项目", meta="", bullets=[Bullet(text=text, evidence_id="ev_edge_1")])],
+                )
+            ],
+        )
+        return lint(ir, evs, prof).errors
+
+    # 小于 10 的裸数字当计数放过；带 % 的比例数字一律要出处
+    check("「3 个项目」这类计数不误报", not _one("负责 3 个模块的联调"), str(_one("负责 3 个模块的联调")))
+    check("编造的 8.7% 被拦", any("8.7" in e for e in _one("把点击率从 2.1% 提到 8.7%")), str(_one("把点击率从 2.1% 提到 8.7%")))
+    check("编造的「3 倍」被拦", any("3" in e for e in _one("吞吐提升 3 倍")), str(_one("吞吐提升 3 倍")))
+    check("有出处的 3.4% 放行", not _one("把点击率做到 3.4%"), str(_one("把点击率做到 3.4%")))
+
+    # rerender 换模板时给可用列表，而不是把 FileNotFoundError 塞进括号
+    job_id = pipeline.add_job(kind="internship", org="某厂", title="算法实习", raw_text="要求：Python，推荐系统经验。")["job"]["id"]
+    gen = pipeline.generate_resume(job_id)
+    check("前置：gen 成功", gen.get("ok") is True, str(gen)[:120])
+    check("gen 报告页数", gen.get("pages") == 1, str(gen.get("pages")))
+    check("一页简历不报页数警告", not any("页数" in w for w in gen["lint"]["warnings"]), str(gen["lint"]["warnings"]))
+
+    from resume_assistant.validate.linter import LintResult
+
+    fake = LintResult()
+    pipeline._warn_pages(fake, 2, JobKind.INTERNSHIP)
+    check("实习简历 2 页要提醒", any("页数" in w for w in fake.warnings), str(fake.warnings))
+    fake2 = LintResult()
+    pipeline._warn_pages(fake2, 2, JobKind.BAOYAN)
+    check("保研简历 2 页不提醒", not fake2.warnings, str(fake2.warnings))
+    bad = pipeline.rerender(gen["application_id"], template_key="没有这个")
+    check("rerender 坏模板不报两遍错", bad.get("error", "").count("模板不存在") == 1, str(bad.get("error")))
+    check("rerender 坏模板给可用列表", "single_column" in (bad.get("hint") or ""), str(bad.get("hint")))
+
+    # 套磁信：没导师姓名要提示，mock 主题不许出现「--」
+    bj = pipeline.add_job(kind="baoyan", title="推荐系统方向", raw_text="研究方向：推荐系统、冷启动。")["job"]["id"]
+    letter = pipeline.generate_letter(bj)
+    check("没导师姓名时给提示", any("导师姓名" in w for w in letter.get("warnings", [])), str(letter.get("warnings"))[:200])
+    subj = (letter.get("letter") or {}).get("subject", "")
+    check("主题不出现空段「--」", "--" not in subj, subj)
+
+    # ---------------------------------------------------- 12 资格校验
+    print("\n[12] 资格校验（在读学生不该被判届别不符）")
+    from resume_assistant.models import Education, Profile
+    from resume_assistant.validate.eligibility import _grad_year
+    from resume_assistant.validate.eligibility import check as elig_check
+
+    def _prof(period: str, major: str = "计算机科学与技术") -> Profile:
+        return Profile(
+            name="张三",
+            education=[Education(school="某大学", major=major, degree="本科", period=period)],
+        )
+
+    check("「至今」判为在读", _grad_year(_prof("2023.09 ~ 至今")) == 9999, str(_grad_year(_prof("2023.09 ~ 至今"))))
+    check("「2022 至今」判为在读", _grad_year(_prof("2022 至今")) == 9999, str(_grad_year(_prof("2022 至今"))))
+    check("明确毕业年份照常推断", _grad_year(_prof("2022.09 ~ 2026.06")) == 2026, str(_grad_year(_prof("2022.09 ~ 2026.06"))))
+
+    j2027 = Job(id="j2027", kind=JobKind.INTERNSHIP, title="算法", raw_text="要求：2027届毕业生，计算机相关专业")
+    issues = elig_check(j2027, _prof("2023.09 ~ 至今")).to_list()
+    check("在读不误报届别不符", not any(i["level"] == "fail" for i in issues), str(issues))
+    issues2 = elig_check(j2027, _prof("2022.09 ~ 2026.06")).to_list()
+    check("真不符才报 fail", any(i["level"] == "fail" for i in issues2), str(issues2))
+
     print(f"\n{'=' * 46}")
     print(f"通过 {len(PASS)} 项，失败 {len(FAIL)} 项")
     if FAIL:

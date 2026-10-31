@@ -113,6 +113,14 @@ def _check(letter: CoverLetter, job: Job, evs: list[Evidence], profile: Profile)
     body = letter.body
     n = letter.word_count()
 
+    # 没填导师姓名，称呼只能写「尊敬的老师」——群发感最强的一种开场，
+    # 而套磁信的回复率几乎全押在「你是不是真的找对人」上
+    if not (job.mentor or "").strip():
+        warns.append(
+            "[档案] 岗位没填导师姓名，称呼只能写「尊敬的老师」；"
+            "建议补上 mentor（如「张明」或「张明教授」），并核对研究方向"
+        )
+
     if not letter.subject.strip():
         warns.append("[结构] 缺少邮件主题")
     elif len(letter.subject) > 40:
@@ -176,9 +184,10 @@ def generate(
     )
 
     mock = {
-        "subject": f"保研咨询-{job.org}-{profile.name}",
+        # 机构没填就退回导师名，再退回「课题组」——否则主题会出现「保研咨询--张三」
+        "subject": f"保研咨询-{job.org or job.mentor or '课题组'}-{profile.name}",
         "body": (
-            f"尊敬的{mentor}老师：\n\n您好！我是{profile.name}，"
+            f"{_salutation(job.mentor)}\n\n您好！我是{profile.name}，"
             f"{profile.education[0].school if profile.education else ''}计算机科学与技术专业本科生。\n\n"
             f"我对您的研究方向很感兴趣，希望有机会加入课题组。\n\n"
             f"随信附上我的简历，盼复。\n\n学生：{profile.name}"

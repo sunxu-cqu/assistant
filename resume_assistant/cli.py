@@ -230,7 +230,15 @@ def job_add(
 @job_app.command("list")
 def job_list(kind: str = typer.Option("", "--kind", "-k")) -> None:
     """列出岗位池。"""
-    for j in pipeline.list_jobs(kind or None):
+    items = pipeline.list_jobs(kind or None)
+    if not items:
+        # 空池直接沉默，用户分不清「没有岗位」和「命令没跑/路径不对」
+        if kind:
+            typer.echo(f"岗位池里没有 kind={kind} 的记录。用 job list 看全部。")
+        else:
+            typer.echo("岗位池是空的。用 job add 添加一个（JD 粘贴进去最稳）。")
+        return
+    for j in items:
         typer.echo(f"[{j['id']}] {j['kind']:10s} {j['title']}  @{j['org']}  要求{j['requirements']}条")
 
 
@@ -277,8 +285,13 @@ def gen_cmd(
         _out(res)
         raise typer.Exit(1)
     lint = res["lint"]
+    pages = res.get("pages")
     typer.echo(f"投递编号：{res['application_id']}  状态：{res['status']}")
-    typer.echo(f"校验：{lint['stats']['bullets']} 条 bullet，{lint['stats']['errors']} 错误，{lint['stats']['warnings']} 提示")
+    typer.echo(
+        f"校验：{lint['stats']['bullets']} 条 bullet，{lint['stats']['errors']} 错误，"
+        f"{lint['stats']['warnings']} 提示"
+        + (f"，PDF {pages} 页" if pages else "")
+    )
     if lint["warnings"]:
         for w in lint["warnings"][:10]:
             typer.echo(f"  ! {w}")

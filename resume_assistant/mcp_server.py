@@ -206,7 +206,18 @@ def job_add(
 @mcp.tool()
 def job_list(kind: str = "") -> dict:
     """列出岗位池。kind 留空则返回全部，可选 "baoyan" / "internship"。"""
-    return _safe(lambda: {"ok": True, "items": pipeline.list_jobs(kind or None)})
+    def _run() -> dict:
+        items = pipeline.list_jobs(kind or None)
+        out: dict[str, Any] = {"ok": True, "total": len(items), "items": items}
+        if not items:
+            out["hint"] = (
+                f"岗位池里没有 kind={kind} 的记录，用 job_list 不带参数看全部"
+                if kind
+                else "岗位池是空的，先用 job_add 录入一个岗位"
+            )
+        return out
+
+    return _safe(_run)
 
 
 # -------------------------------------------------------------------- 匹配
@@ -319,10 +330,12 @@ def app_advance(app_id: str, to_status: str, note: str = "") -> dict:
 
 @mcp.tool()
 def app_timeline(app_id: str) -> dict:
-    """查看某条投递的完整状态变更历史。"""
-    from .store import db
+    """某条投递的状态变更历史，按时间正序，每条含 from / to / at / note。
 
-    return _safe(lambda: {"ok": True, "events": db.app_timeline(app_id)})
+    用于回答「这周有回音吗」「卡在 screening 几天了」这类问题——
+    app_detail 给的是当前状态，这里给的是怎么走到当前状态的。
+    """
+    return _safe(pipeline.application_timeline, app_id)
 
 
 @mcp.tool()

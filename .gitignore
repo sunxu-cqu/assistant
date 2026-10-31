@@ -25,34 +25,16 @@ data/output/_preview/*.png
 # 通用忽略
 *.pdf
 !data/output/_preview/**/*.pdf
-!tests/sandbox/workspace/**/*.pdf
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
 
-# 端到端测试的运行时产物（fixture 资料本身要提交，保证可复现）
-tests/sandbox/data/
-tests/sandbox/*.log
-tests/sandbox/*.png
-
-# 字号自适应对比试排产物
-tests/sandbox/fit_*/
-tests/sandbox/_fit/
-
-# 知识库校对卡片页
+# 知识库校对卡片页 / 投递看板页
 data/review.html
-# 冒烟测试的沙箱数据（每次重跑重建）
-tests/sandbox/smoke/
-
-# 投递看板页
 data/board.html
 
-# 看板演示用沙箱
-tests/sandbox/boardtest/
-
-# 边界测试与临时排查用的沙箱
-tests/sandbox/edge/
-tests/sandbox/badyaml/
-tests/sandbox/noedu/
-tests/sandbox/*.txt
+# 测试沙箱：只提交 fixture 资料（tests/sandbox/workspace/），其余全是每次重跑重建的产物
+tests/sandbox/*
+!tests/sandbox/workspace/
+!tests/sandbox/workspace/**/*.pdf

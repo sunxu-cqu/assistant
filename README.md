@@ -481,14 +481,17 @@ draft → matched → composed → sent → screening → interview → offer
 六个脚本，只有最后一个消耗 API 额度：
 
 ```bash
-# 全链路冒烟（96 项断言：资料接入→知识库→匹配→组稿→校验→渲染→状态机→校对→看板→开场白）
+# 全链路冒烟（97 项断言：资料接入→知识库→匹配→组稿→校验→渲染→状态机→校对→看板→开场白）
 set RESUME_ASSISTANT_MOCK=1
 ./.venv/Scripts/python.exe tests/smoke.py
 
-# 边界测试（69 项断言：非法输入 / 损坏 YAML / 并发 / 超大文件 / CLI 退出码）
+# 边界测试（87 项断言：非法输入 / 损坏 YAML / 并发 / 超大文件 / 数字闸门 / 资格校验 / CLI 退出码）
 ./.venv/Scripts/python.exe tests/edge_cases.py
 
-# MCP 协议握手（initialize / tools/list / tools/call）
+# CLI 全命令冒烟（77 项断言：每个子命令的 --help / 只读 / 错误输入 / 写命令正路）
+./.venv/Scripts/python.exe tests/cli_smoke.py
+
+# MCP 协议握手（initialize / tools/list / tools/call / 错误路径 / stderr 干净度）
 ./.venv/Scripts/python.exe tests/test_mcp.py
 
 # 模板排版预览（假数据渲染两套模板，产出 data/output/_preview/*.pdf）
@@ -518,6 +521,8 @@ set RESUME_ASSISTANT_MOCK=1
 | bullet 重复检测与去重 | 通过 |
 | 校验闸门拦截编造数字 / 虚假 evidence_id | 通过 |
 | 数字溯源不误杀型号数字（V100）与未入 metrics 的真实数字 | 通过 |
+| 比例数字（8.7% / 3 倍）不论大小都要出处；「3 个项目」这类计数不误报 | 通过 |
+| PDF 页数上报：实习超 1 页 / 保研超 2 页给提醒 | 通过 |
 | Typst 渲染中文 PDF（两套模板，单页） | 通过 |
 | 字号自适应（页数不变前提下放大，等比推导标题） | 通过 |
 | 投递看板：截止提醒 / 跟进提醒 / 四栏分列 | 通过 |
@@ -532,8 +537,11 @@ set RESUME_ASSISTANT_MOCK=1
 | 冒烟测试沙箱隔离（不写真实 data/） | 通过 |
 | 双线状态机（保研 / 实习，含非法转移拒绝） | 通过 |
 | 硬性资格校验（届别 / 学历 / 专业） | 通过 |
+| 在读学生（「2023.09 ~ 至今」）不被误判届别不符 | 通过 |
 | 套磁信（称呼不叠字、不虚构附件、不编造论文） | 通过 |
+| 套磁信没填导师姓名时提示补 mentor，主题不出现空段 | 通过 |
 | 实习开场白（长度上限、可实习时间不许编、空话识别） | 通过 |
+| 开场白缺 internship_available 时提示补档案 | 通过 |
 | 边界：非法 kind / 非法状态名 / 未知模板都返回结构化错误，不抛堆栈 | 通过 |
 | 边界：损坏的 profile.yaml 给出行号，损坏的证据文件被统计并告警 | 通过 |
 | 边界：8 线程并发写备注不丢，并发建档只产生一条 | 通过 |

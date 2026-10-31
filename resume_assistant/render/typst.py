@@ -142,6 +142,11 @@ def _page_count(pdf_path: Path) -> int | None:
         return None
 
 
+def pdf_pages(pdf_path: Path | None) -> int | None:
+    """渲染后有几页。拿不到页数返回 None（不要因为数不出页数就报错）。"""
+    return _page_count(pdf_path) if pdf_path else None
+
+
 def render_pdf(
     ir: ResumeIR,
     template: Template,

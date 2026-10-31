@@ -54,6 +54,11 @@ def _grad_year(profile: Profile) -> int | None:
     years: list[int] = []
     for edu in profile.education:
         period = edu.period or ""
+        # 「2023.09 ~ 至今」必须先判：否则下面的兜底 findall 只会捞到 2023，
+        # 把在读学生算成 2023 届已毕业，届别校验直接误报 fail
+        if re.search(r"[~–—-]\s*(至今|现在|在读)|(?:19|20)\d{2}\s*(至今|现在|在读)", period):
+            years.append(9999)  # 在读
+            continue
         m = re.search(r"(\d{4})\s*[-./]\s*\d{1,2}\s*[~–—-]\s*(\d{4})", period)
         if m:
             years.append(int(m.group(2)))

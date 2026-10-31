@@ -429,11 +429,17 @@ def main() -> int:
 
     no_avail = prof.model_copy(update={"internship_available": ""})
     p_avail = Pitch(job_id="x", short="我是张三，每周 4 天可实习。", full="您好，我是张三，每周 4 天可实习。")
+    w_avail = pitch_mod._check(p_avail, job_obj, cand, no_avail)
     check(
         "profile 没填可实习时间时判编造",
-        any("internship_available" in w for w in pitch_mod._check(p_avail, job_obj, cand, no_avail)),
-        str(pitch_mod._check(p_avail, job_obj, cand, no_avail)),
+        any("编造风险" in w and "internship_available" in w for w in w_avail),
+        str(w_avail),
     )
+    # 不编也得提醒：档案缺这项，正文就写不出 HR 第一句要问的东西
+    w_blank = pitch_mod._check(
+        Pitch(job_id="x", short="我是张三", full="您好，我是张三。"), job_obj, cand, no_avail
+    )
+    check("没填可实习时间 → 提示补档案", any(w.startswith("[档案]") for w in w_blank), str(w_blank))
     p_num = Pitch(job_id="x", short="把准确率做到 99.9%", full="您好，我是张三，把准确率做到 99.9%。")
     check("编造的数字被拦下", any("找不到出处" in w for w in pitch_mod._check(p_num, job_obj, cand, prof)))
     p_empty = Pitch(job_id="x", short="贵司平台广阔", full="非常期待加入，贵司平台广阔。")

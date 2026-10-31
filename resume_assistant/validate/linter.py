@@ -17,6 +17,10 @@ from ..models import Evidence, Profile, ResumeIR
 YEAR_RE = re.compile(r"^(19|20)\d{2}$")
 # 排除紧跟在字母后的数字：V100 / ResNet-50 / CUB-200 里的型号数字不是成果指标
 NUM_RE = re.compile(r"(?<![A-Za-z0-9])\d+(?:\.\d+)?")
+# 带比例单位的数字：8.7% / 3 倍 / 2.5x。
+# 这类数字不论大小都必须溯源——「点击率 8.7%」是简历上最常被编造、
+# 也最容易被面试官追问的一句，不能因为小于 10 就放过。
+RATIO_RE = re.compile(r"(?<![A-Za-z0-9])(\d+(?:\.\d+)?)\s*(%|％|倍|×|[xX](?![A-Za-z0-9]))")
 TECH_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#.\-]{1,20}")
 
 IGNORE_WORDS = {
@@ -114,16 +118,20 @@ def lint(ir: ResumeIR, evidences: list[Evidence], profile: Profile) -> LintResul
                     res.warnings.append(f"[格式] {where}：bullet 结尾不应有句号")
 
                 # ---- 第二道闸：数字溯源
+                ratio_nums = {m.group(1) for m in RATIO_RE.finditer(b.text)}
                 for n in NUM_RE.findall(b.text):
                     if YEAR_RE.match(n):
                         continue
                     if n in allowed_nums:
                         continue
-                    try:
-                        if float(n) < 10:
-                            continue
-                    except ValueError:
-                        pass
+                    if n not in ratio_nums:
+                        # 裸数字（「3 个项目」「2 周」）多半是计数，逐条查误报太多；
+                        # 带 %/倍/x 的比例数字不享受这个豁免，多小都要有出处
+                        try:
+                            if float(n) < 10:
+                                continue
+                        except ValueError:
+                            pass
                     src = "profile" if b.evidence_id == "profile" else b.evidence_id
                     res.errors.append(
                         f"[溯源] {where}：数字「{n}」在 {src} 的证据中找不到出处，疑似编造"

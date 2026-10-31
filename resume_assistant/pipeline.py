@@ -28,7 +28,7 @@ from .models import (
     ResumeIR,
     Snapshot,
 )
-from .render.typst import render_pdf
+from .render.typst import pdf_pages, render_pdf
 from .store import db
 from .validate.linter import lint
 
@@ -335,14 +335,24 @@ def rerender(app_id: str, template_key: str = "") -> dict[str, Any]:
     key = template_key or ir.template or "single_column"
     try:
         template = load_template(key)
-    except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "stage": "template", "error": f"模板不存在：{key}（{exc}）"}
+    except Exception:  # noqa: BLE001
+        # 和 gen 说同一句话：只报「模板不存在：xxx（模板不存在：C:\...yaml）」
+        # 等于让人自己猜有哪些模板可用
+        keys = "、".join(t["key"] for t in list_templates()) or "（无）"
+        return {
+            "ok": False,
+            "stage": "template",
+            "error": f"模板不存在：{key}",
+            "hint": f"可用模板：{keys}",
+        }
 
     evs = load_all_evidence()
     profile = load_profile()
     result = lint(ir, evs, profile)
 
     typ_path, pdf_path = render_pdf(ir, template, out_dir)
+    pages = pdf_pages(pdf_path)
+    _warn_pages(result, pages, app.kind)
     if template_key:
         ir.template = template.key
         _write_ir(ir, ir_path)  # 换了模板就写回，避免下次又不一致
@@ -365,6 +375,24 @@ def rerender(app_id: str, template_key: str = "") -> dict[str, Any]:
         "lint": result.to_dict(),
         "hint": None if result.ok else "校验未通过但已渲染；这些是编造风险，发出去前务必处理",
     }
+
+
+def _warn_pages(result: Any, pages: int | None, kind: Any) -> None:
+    """页数超常规就提醒。
+
+    字号自适应只会往大里试、不会往小里收：内容塞不下时它只是停手，
+    不会告诉你「这份简历已经两页了」。实习简历过一页基本没人翻到第二页，
+    保研简历两页是常态，所以阈值按投递类型分。
+    """
+    if not pages:
+        return
+    limit = 2 if kind == JobKind.BAOYAN else 1
+    if pages > limit:
+        result.warnings.append(
+            f"[页数] PDF 有 {pages} 页，"
+            f"{'保研简历' if kind == JobKind.BAOYAN else '实习简历'}通常 {limit} 页以内；"
+            "删掉最不相关的条目，或换更紧凑的模板"
+        )
 
 
 def generate_resume(
@@ -423,6 +451,8 @@ def generate_resume(
     out_dir = OUTPUT_DIR / app.id
     _write_ir(ir, out_dir / "ir.yaml")
     typ_path, pdf_path = render_pdf(ir, template, out_dir)
+    pages = pdf_pages(pdf_path)
+    _warn_pages(result, pages, job.kind)
 
     db.set_snapshot(
         app.id,
@@ -446,6 +476,7 @@ def generate_resume(
         "ir_path": str(out_dir / "ir.yaml"),
         "typ_path": str(typ_path),
         "pdf_path": str(pdf_path) if pdf_path else None,
+        "pages": pages,
         "match_summary": {
             "hits": [{"id": h.evidence_id, "title": h.title, "score": h.score, "reason": h.reason} for h in report.hits[:8]],
             "gaps": report.gaps,
@@ -563,6 +594,17 @@ def get_application(app_id: str) -> dict[str, Any]:
         "timeline": db.app_timeline(app_id),
         "job": (db.get_job(app.job_id) or Job(id="", kind=JobKind.INTERNSHIP, title="")).model_dump(mode="json"),
     }
+
+
+def application_timeline(app_id: str) -> dict[str, Any]:
+    """某条投递的状态变更历史。
+
+    必须先确认这条投递存在：不存在的 id 直接返回空 events，客户端会读成
+    「这条投递从没动过」，而不是「你 id 打错了」——前者会让人以为记录丢了。
+    """
+    if db.get_application(app_id) is None:
+        return {"ok": False, "error": f"投递记录不存在：{app_id}"}
+    return {"ok": True, "events": db.app_timeline(app_id)}
 
 
 def note_application(app_id: str, note: str) -> dict[str, Any]:

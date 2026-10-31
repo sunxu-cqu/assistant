@@ -178,6 +178,13 @@ def _check(
                 f"[编造风险] 提到「{m.group(0)}」，但 profile.yaml 的 internship_available 是空的，"
                 "请先填真实的可实习时间"
             )
+        else:
+            # 不编是对的，但整句不写也有代价：实习 HR 第一句就问「能来几天、几个月」。
+            # 这条提示只在没填的时候出现一次，提醒的是档案缺项，不是文案问题
+            warns.append(
+                "[档案] profile.yaml 的 internship_available 是空的，正文里写不出可实习时间；"
+                "这是实习 HR 最先问的一句，建议先填（如「2026.01 起，每周 4 天，可实习 6 个月」）"
+            )
 
     # 数字溯源
     allowed = _allowed_numbers(evs, profile, job)

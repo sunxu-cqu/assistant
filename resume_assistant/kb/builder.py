@@ -469,6 +469,22 @@ def update_evidence(evidence_id: str, **fields: Any) -> dict[str, Any]:
     if not clean:
         return {"ok": False, "error": "没有要修改的字段"}
 
+    # weight 是人工手输的，越界必须报错而不是夹到边界。
+    # Evidence 里的 _clamp 是给 LLM 抽取的脏数据兜底的（99 夹成 1.0 无伤大雅）；
+    # 人把 0.9 打成 9，静默变成 1.0，他会以为改成了 0.9。
+    if "weight" in clean:
+        try:
+            w = float(clean["weight"])
+        except (TypeError, ValueError):
+            return {"ok": False, "error": f"weight 必须是数字，收到「{clean['weight']}」"}
+        if not 0.0 <= w <= 1.0:
+            return {
+                "ok": False,
+                "error": f"weight 必须在 0~1 之间，收到 {w:g}",
+                "hint": "0 表示基本不用这条，1 表示最优先；0.5 是默认值",
+            }
+        clean["weight"] = w
+
     for path in sorted(EVIDENCE_DIR.glob("*.yaml")):
         try:
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
