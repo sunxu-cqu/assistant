@@ -537,6 +537,68 @@ def main() -> int:
     check("大日志没挤掉真正有用的文件", "0.78" in pf.text, pf.text[-200:])
     shutil.rmtree(big, ignore_errors=True)
 
+    # ------------------------------------------- 14 可选能力（装了才用，没装不许崩）
+    print("\n[14] 可选能力：向量召回与 OCR")
+    from resume_assistant.kb import ocr as ocr_mod
+    from resume_assistant.match import embed as embed_mod
+    from resume_assistant.match.recall import recall
+
+    ok, why = embed_mod.available()
+    check("embed.available 返回布尔与说明", isinstance(ok, bool) and isinstance(why, str), f"{ok} {why}")
+    enc = embed_mod.get_encoder()
+    check("没装时 get_encoder 返回 None（不抛异常）", enc is None or callable(enc), str(type(enc)))
+
+    job = Job(id="j1", kind=JobKind.INTERNSHIP, title="推荐算法实习", raw_text="要求：推荐系统、PyTorch")
+    ev = Evidence(id="ev_r", kind="project", title="推荐系统", claim="点击率 2.1%→3.4%", skill_tags=["PyTorch"])
+    base = recall(job, [ev], top_k=5)
+    check("无向量时召回正常", len(base) == 1, str(base))
+
+    # 用假编码器验证融合路径：接口对得上、顺序不乱、异常不外泄
+    def fake_enc(texts: list[str]) -> list[list[float]]:
+        return [[1.0, 0.0] for _ in texts]
+
+    fused = recall(job, [ev], top_k=5, encode_fn=fake_enc)
+    check("传 encode_fn 后融合不崩", len(fused) == 1 and 0.0 <= fused[0][1] <= 1.0, str(fused))
+
+    def boom(texts: list[str]) -> list[list[float]]:
+        raise RuntimeError("模型炸了")
+
+    try:
+        broken = recall(job, [ev], top_k=5, encode_fn=boom)
+        check("编码器抛异常时退回 BM25", len(broken) == 1, str(broken))
+    except Exception as exc:  # noqa: BLE001
+        check("编码器抛异常时退回 BM25", False, f"{type(exc).__name__}: {exc}")
+
+    # OCR：没装引擎 → 明确说清楚；装了 → 走通读图流程
+    ok_ocr, why_ocr = ocr_mod.available()
+    check("ocr.available 返回布尔与说明", isinstance(ok_ocr, bool) and isinstance(why_ocr, str), f"{ok_ocr} {why_ocr}")
+
+    img_path = _SANDBOX / "shot.png"
+    from PIL import Image
+
+    Image.new("RGB", (60, 24), "white").save(img_path)
+
+    if not ok_ocr:
+        text, why2 = ocr_mod.read_image(img_path)
+        check("没装 OCR 时给出原因而不是空字符串", not text and bool(why2), f"{text!r} {why2}")
+        check("原因里说明怎么启用", "pip install" in why2 or "OCR" in why2, why2)
+    else:
+        text, _ = ocr_mod.read_image(img_path)
+        check("装了 OCR 时读图不崩", isinstance(text, str), repr(text)[:80])
+
+    # 用假引擎把「装了之后」的路径也跑一遍（不依赖真的装没装）
+    class FakeEngine:
+        def __call__(self, arr, *a, **k):
+            return [([[0, 0], [1, 1]], "省赛一等奖 2024", 0.98)], 0.1
+
+    old = (ocr_mod._ENGINE, ocr_mod._NAME, ocr_mod._TRIED)
+    ocr_mod._ENGINE, ocr_mod._NAME, ocr_mod._TRIED = FakeEngine(), "rapidocr", True
+    try:
+        text, why3 = ocr_mod.read_image(img_path)
+        check("假引擎下图片 OCR 走通", "省赛一等奖" in text, f"{text!r} {why3}")
+    finally:
+        ocr_mod._ENGINE, ocr_mod._NAME, ocr_mod._TRIED = old
+
     print(f"\n{'=' * 46}")
     print(f"通过 {len(PASS)} 项，失败 {len(FAIL)} 项")
     if FAIL:

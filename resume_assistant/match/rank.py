@@ -121,7 +121,9 @@ def rank(job: Job, candidates: list[Evidence], llm: DeepSeek | None = None, min_
 
 
 def match_job(job: Job, evidences: list[Evidence], llm: DeepSeek | None = None) -> MatchReport:
+    from . import embed
     from .recall import recall
 
-    candidates = [e for e, _, _ in recall(job, evidences, top_k=30)]
+    # 装了 sentence-transformers 就带上语义召回；没装返回 None，recall 只用 BM25
+    candidates = [e for e, _, _ in recall(job, evidences, top_k=30, encode_fn=embed.get_encoder())]
     return rank(job, candidates, llm=llm)

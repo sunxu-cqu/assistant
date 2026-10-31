@@ -69,6 +69,15 @@ python -m venv .venv
 ./.venv/Scripts/python.exe -m pip install -r requirements.txt
 ```
 
+装完就能用。下面两个是**可选增强**，不装也能跑，`doctor` 里显示为 `·` 而不是报错：
+
+| 能力 | 装法 | 装了之后 |
+|---|---|---|
+| 语义召回（bge-m3） | `pip install sentence-transformers` | BM25 0.5 + 向量 0.5 融合，能抓「个性化排序」↔「推荐系统」这类同义不同词 |
+| 扫描件 OCR | `pip install rapidocr-onnxruntime` | 扫描版 PDF / 截图按前 5 页识别，不再只能提示「读不到」 |
+
+前者首次使用会下载模型（约 2GB），向量缓存在 `data/.cache/`；后者纯 onnx，CPU 每页 1-2 秒。
+
 ### 2. 填配置
 
 ```bash
@@ -261,6 +270,32 @@ cp -r workspace/samples/2024-校园二手交易平台 workspace/projects/
 
 备注只进时间线。如果它进了 `history`，最后一条时间戳就会被刷新，
 「投出去十天没动静」的提醒永远不会触发。
+
+### 10. 图形界面（可选）
+
+命令行能做完所有事，但「这周该做什么」用眼睛看比读文本快。
+
+```bash
+./.venv/Scripts/python.exe -m resume_assistant.cli ui
+```
+
+浏览器会自动打开 `http://127.0.0.1:8765/`。界面分四块：
+
+| 页面 | 内容 |
+|---|---|
+| 投递看板 | 四栏卡片（待办 / 已投出 / 进行中 / 已结束），每条带「下一步」和提醒；卡片上直接生成简历、推进状态、记一笔 |
+| 岗位池 | 目标岗位与导师，一键匹配看对口度，一键生成简历 / 套磁信 / 开场白 |
+| 知识库 | 证据数、指标数、缺出处数，以及校对清单（kind 标错、时间缺失、重复项目） |
+| 环境自检 | 依赖、档案、模型、语义召回、OCR 的启用状态 |
+
+几个实现上的取舍：
+
+- **零额外依赖**：用标准库 `http.server`，不是 FastAPI。为一个本地单人工具拖一个 web 框架进来，
+  换来的是多一个装不上的可能。
+- **只绑 127.0.0.1**：简历资料是隐私，不对外监听。
+- **PDF 预览按完整路径取**：多个投递的 PDF 都叫 `resume.pdf`，按文件名找会拿到别人的简历；
+  服务端会校验路径必须落在 `data/output/` 下。
+- **单文件前端**：一个 `ui.html`，CSS/JS 全内联，离线可用，改样式不用打包。
 
 ---
 
@@ -455,15 +490,15 @@ draft → matched → composed → sent → screening → interview → offer
 
 ---
 
-## 已知限制（P0）
+## 已知限制
 
 | 限制 | 说明 | 后续 |
 |---|---|---|
-| 无向量检索 | 只有 BM25 + 标签重叠，语义召回弱 | P1 接 bge-m3（接口已留 `encode_fn`） |
-| 无 OCR | 扫描版 PDF / 截图读不到，`kb scan` 会明确列出 | P1 接 PaddleOCR |
+| 语义召回要另装 | 默认只有 BM25 + 标签重叠；装 `sentence-transformers` 才启用 bge-m3 | 已支持，见「装依赖」 |
+| OCR 要另装 | 默认读不到扫描件；装 `rapidocr-onnxruntime` 才识别 | 已支持，见「装依赖」 |
 | 老版 Office | `.doc` / `.xls` / `.ppt` 打不开，需另存为新格式（会提示） | 不打算支持，二进制格式太脆 |
 | 抓取能力弱 | JS 渲染页取不到正文，会引导改手动粘贴 | 视需要接 Playwright |
-| 无 VSCode UI | 目前只有 CLI + MCP | P2 做 Webview 看板 + diff 确认 |
+| 界面是本地网页 | 不是 VSCode 扩展，`resume ui` 起一个本地服务（只绑 127.0.0.1） | 需要的话可以再包一层 Webview |
 | 单语言 | 只支持中文 | — |
 
 ---
@@ -493,6 +528,9 @@ set RESUME_ASSISTANT_MOCK=1
 
 # MCP 协议握手（initialize / tools/list / tools/call / 错误路径 / stderr 干净度）
 ./.venv/Scripts/python.exe tests/test_mcp.py
+
+# 界面层（页面能开 / 数据能拿 / 动作能执行 / 越界访问被挡）
+./.venv/Scripts/python.exe tests/web_smoke.py
 
 # 模板排版预览（假数据渲染两套模板，产出 data/output/_preview/*.pdf）
 ./.venv/Scripts/python.exe tests/preview_template.py
@@ -553,6 +591,9 @@ set RESUME_ASSISTANT_MOCK=1
 | 边界：8 线程并发写备注不丢，并发建档只产生一条 | 通过 |
 | 边界：单文件超 20MB 直接跳过（数据集/录屏读进来只是噪声） | 通过 |
 | MCP stdio 握手 + 23 个工具 | 通过 |
+| 语义召回：装了走融合、没装退回 BM25、编码器抛异常也不影响匹配 | 通过 |
+| OCR：没装时给出启用方法；装了就按页识别（用假引擎验证过整条链路） | 通过 |
+| 本地界面：页面能开、数据能拿、动作能执行、越界访问被挡、8 并发稳定 | 通过 |
 
 真实 API 端到端跑通 5 个岗位（3 实习 + 2 保研），简历全部 0 错误生成，2 封套磁信 0 编造风险。
 另有一组「像真人资料」的 8 个文件夹（多文件项目 / 备份文件夹 / docx 表格 / 6MB 日志 / 25MB csv / 扫描件 / GBK 笔记）跑通全流程：8 条证据，实习 1 页、保研 1 页，均 0 错误。

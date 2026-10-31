@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>简历助手</title>
+<style>
+  :root{
+    --bg:#f5f6f8;
+    --panel:#ffffff;
+    --ink:#191c22;
+    --ink-2:#4b5260;
+    --muted:#8b93a1;
+    --line:#e7e9ee;
+    --line-2:#eff1f5;
+    --brand:#1f4e79;
+    --brand-2:#2a679c;
+    --brand-soft:#eaf1f8;
+    --ok:#2e8b57;
+    --ok-soft:#e9f5ee;
+    --warn:#b7791f;
+    --warn-soft:#fdf3e3;
+    --danger:#c0392b;
+    --danger-soft:#fdecea;
+    --radius:14px;
+    --radius-sm:10px;
+    --shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 24px -12px rgba(16,24,40,.12);
+    --shadow-lg:0 2px 6px rgba(16,24,40,.06), 0 24px 48px -20px rgba(16,24,40,.22);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+  input,textarea,select{font:inherit;color:inherit}
+  ::selection{background:#cfe1f2}
+
+  .app{display:grid;grid-template-columns:232px 1fr;min-height:100vh}
+
+  /* ---------------- 侧栏 ---------------- */
+  .side{
+    position:sticky;top:0;height:100vh;padding:22px 16px;
+    background:linear-gradient(180deg,#fbfcfd 0%,#f7f8fa 100%);
+    border-right:1px solid var(--line);
+    display:flex;flex-direction:column;gap:22px;
+  }
+  .brand{display:flex;align-items:center;gap:11px;padding:0 6px}
+  .logo{
+    width:36px;height:36px;border-radius:11px;display:grid;place-items:center;
+    background:linear-gradient(140deg,var(--brand) 0%,#35709f 100%);
+    color:#fff;font-weight:700;font-size:17px;letter-spacing:.5px;
+    box-shadow:0 6px 14px -6px rgba(31,78,121,.6);
+  }
+  .brand b{display:block;font-size:14.5px;letter-spacing:.2px}
+  .brand span{display:block;font-size:11px;color:var(--muted);letter-spacing:.3px}
+
+  nav{display:flex;flex-direction:column;gap:2px}
+  .nav-item{
+    display:flex;align-items:center;gap:10px;width:100%;
+    padding:9px 11px;border-radius:9px;color:var(--ink-2);
+    font-size:13.5px;transition:.16s ease;text-align:left;
+  }
+  .nav-item svg{width:16px;height:16px;opacity:.65;flex:none}
+  .nav-item:hover{background:#eef1f5;color:var(--ink)}
+  .nav-item.active{background:var(--panel);color:var(--brand);font-weight:600;box-shadow:var(--shadow)}
+  .nav-item.active svg{opacity:1}
+  .nav-item .badge{
+    margin-left:auto;font-size:11px;font-weight:600;padding:1px 7px;border-radius:999px;
+    background:var(--danger-soft);color:var(--danger);
+  }
+  .side-foot{margin-top:auto;font-size:11.5px;color:var(--muted);padding:0 8px;line-height:1.7}
+  .side-foot b{color:var(--ink-2);font-weight:600}
+
+  /* ---------------- 主区 ---------------- */
+  main{min-width:0;display:flex;flex-direction:column}
+  .topbar{
+    position:sticky;top:0;z-index:20;
+    display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding:18px 30px 16px;
+    background:rgba(245,246,248,.82);backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--line);
+  }
+  .topbar h1{margin:0;font-size:19px;letter-spacing:-.2px}
+  .topbar p{margin:2px 0 0;font-size:12.5px;color:var(--muted)}
+  .actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+
+  .btn{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:8px 14px;border-radius:9px;font-size:13px;font-weight:500;
+    border:1px solid transparent;transition:.15s ease;white-space:nowrap;
+  }
+  .btn svg{width:14px;height:14px}
+  .btn-primary{background:var(--brand);color:#fff;box-shadow:0 6px 14px -8px rgba(31,78,121,.8)}
+  .btn-primary:hover{background:var(--brand-2);transform:translateY(-1px)}
+  .btn-ghost{background:var(--panel);border-color:var(--line);color:var(--ink-2)}
+  .btn-ghost:hover{border-color:#d3d8e0;color:var(--ink);transform:translateY(-1px)}
+  .btn-tiny{padding:4px 9px;font-size:12px;border-radius:7px}
+  .btn[disabled]{opacity:.5;pointer-events:none}
+  .btn-ok{background:var(--ok-soft);color:var(--ok);border-color:#d6ebdf}
+  .btn-ok:hover{background:#ddefe4}
+
+  .view{padding:22px 30px 60px;flex:1}
+
+  /* ---------------- 指标条 ---------------- */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px}
+  .stat{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px 16px;box-shadow:var(--shadow);position:relative;overflow:hidden;
+    animation:rise .34s ease both;
+  }
+  .stat::after{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:var(--brand-soft)}
+  .stat b{display:block;font-size:24px;line-height:1.2;letter-spacing:-.6px;font-variant-numeric:tabular-nums}
+  .stat span{font-size:12px;color:var(--muted)}
+  .stat.hot::after{background:linear-gradient(90deg,#f6c6c0,#f0a79e)}
+  .stat.hot b{color:var(--danger)}
+  .stat.good::after{background:linear-gradient(90deg,#bfe3cd,#8fd0ac)}
+
+  /* ---------------- 看板 ---------------- */
+  .board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+  @media (max-width:1180px){.board{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  .col{min-width:0}
+  .col-head{display:flex;align-items:center;gap:8px;padding:0 4px 10px}
+  .col-head h3{margin:0;font-size:13px;font-weight:600;color:var(--ink-2);letter-spacing:.3px}
+  .col-head em{
+    font-style:normal;font-size:11px;font-weight:600;color:var(--muted);
+    background:#eceef2;border-radius:999px;padding:1px 8px;
+  }
+  .col-body{display:flex;flex-direction:column;gap:10px;min-height:60px}
+
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:13px 14px;box-shadow:var(--shadow);transition:.18s ease;cursor:pointer;
+    animation:rise .34s ease both;
+  }
+  .card:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg);border-color:#dde1e8}
+  .card-top{display:flex;align-items:flex-start;gap:8px}
+  .dot{width:7px;height:7px;border-radius:50%;margin-top:7px;flex:none;background:var(--muted)}
+  .dot.draft{background:#9aa3b2}
+  .dot.composed,.dot.matched{background:#5b8fc7}
+  .dot.sent,.dot.screening{background:var(--brand)}
+  .dot.replied,.dot.meeting,.dot.interview{background:#7a5cc4}
+  .dot.offer{background:var(--ok)}
+  .dot.rejected{background:#b9bec9}
+  .dot.withdrawn{background:#c9ccd3}
+  .card h4{margin:0;font-size:13.5px;font-weight:600;line-height:1.45;letter-spacing:-.1px}
+  .card .org{font-size:12px;color:var(--muted);margin-top:1px}
+  .card .meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+  .chip{
+    font-size:11px;padding:1.5px 7px;border-radius:6px;background:#f2f4f7;color:var(--ink-2);
+    border:1px solid #eceef2;white-space:nowrap;
+  }
+  .chip.err{background:var(--danger-soft);color:var(--danger);border-color:#f6d5d1}
+  .chip.warn{background:var(--warn-soft);color:var(--warn);border-color:#f2e2c4}
+  .chip.ok{background:var(--ok-soft);color:var(--ok);border-color:#d6ebdf}
+  .chip.brand{background:var(--brand-soft);color:var(--brand);border-color:#d8e6f3}
+
+  .alerts{margin-top:9px;display:flex;flex-direction:column;gap:5px}
+  .alert{font-size:11.5px;line-height:1.5;padding:5px 8px;border-radius:7px;background:#f7f8fa;color:var(--ink-2)}
+  .alert.error{background:var(--danger-soft);color:#8e2b20}
+  .alert.warn{background:var(--warn-soft);color:#8a5a12}
+  .next{margin-top:9px;font-size:11.5px;color:var(--muted)}
+  .next b{color:var(--ink-2);font-weight:500}
+  .card-actions{display:flex;gap:6px;margin-top:11px;flex-wrap:wrap}
+
+  .empty{
+    border:1px dashed #dfe3ea;border-radius:var(--radius-sm);
+    padding:18px;text-align:center;color:var(--muted);font-size:12px;background:#fafbfc;
+  }
+
+  /* ---------------- 列表 / 表格 ---------------- */
+  .panel{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);overflow:hidden;margin-bottom:16px;
+  }
+  .panel-head{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:14px 18px;border-bottom:1px solid var(--line-2);
+  }
+  .panel-head h3{margin:0;font-size:14px;font-weight:600}
+  .panel-head .sub{font-size:12px;color:var(--muted)}
+  .rows{display:flex;flex-direction:column}
+  .row{
+    display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;
+    padding:13px 18px;border-bottom:1px solid var(--line-2);transition:.14s;
+  }
+  .row:last-child{border-bottom:0}
+  .row:hover{background:#fbfcfd}
+  .row .t{font-size:13.5px;font-weight:500}
+  .row .s{font-size:12px;color:var(--muted);margin-top:2px}
+  .row .r{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+
+  .kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;padding:16px 18px}
+  .kv div span{display:block;font-size:11.5px;color:var(--muted)}
+  .kv div b{font-size:13.5px;font-weight:600}
+
+  /* ---------------- 表单 ---------------- */
+  .field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+  .field label{font-size:12px;color:var(--ink-2);font-weight:500}
+  .field input,.field textarea,.field select{
+    padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#fcfcfd;
+    outline:none;transition:.15s;font-size:13px;
+  }
+  .field input:focus,.field textarea:focus,.field select:focus{
+    border-color:#b7cfe6;background:#fff;box-shadow:0 0 0 3px rgba(31,78,121,.08)
+  }
+  .field textarea{min-height:120px;resize:vertical;line-height:1.6}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+  @media (max-width:720px){.grid2{grid-template-columns:1fr}}
+
+  /* ---------------- 弹层 ---------------- */
+  .modal{
+    position:fixed;inset:0;z-index:60;display:none;
+    background:rgba(20,24,31,.38);backdrop-filter:blur(3px);
+    align-items:center;justify-content:center;padding:28px;
+  }
+  .modal.open{display:flex;animation:fade .18s ease}
+  .modal-box{
+    background:var(--panel);border-radius:18px;box-shadow:var(--shadow-lg);
+    width:min(860px,100%);max-height:88vh;display:flex;flex-direction:column;
+    animation:pop .22s cubic-bezier(.2,.9,.3,1.1);
+  }
+  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line-2)}
+  .modal-head h3{margin:0;font-size:15px}
+  .modal-body{padding:20px;overflow:auto}
+  .modal-body iframe{width:100%;height:64vh;border:1px solid var(--line);border-radius:10px;background:#fff}
+  .icon-btn{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--muted)}
+  .icon-btn:hover{background:#f1f3f6;color:var(--ink)}
+
+  /* ---------------- 提示 ---------------- */
+  #toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:80;display:flex;flex-direction:column;gap:8px;align-items:center}
+  .toast{
+    background:#1d222b;color:#fff;padding:9px 16px;border-radius:10px;font-size:13px;
+    box-shadow:var(--shadow-lg);animation:toastIn .22s ease both;
+  }
+  .toast.err{background:#8e2b20}
+  .toast.ok{background:#1f5c3d}
+
+  .loading{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:13px;padding:26px 4px}
+  .spinner{
+    width:15px;height:15px;border:2px solid #d9dee6;border-top-color:var(--brand);
+    border-radius:50%;animation:spin .7s linear infinite;
+  }
+
+  .muted{color:var(--muted)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
+  .sep{height:1px;background:var(--line-2);margin:14px 0}
+
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
+  @keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="logo">简</div>
+      <div><b>简历助手</b><span>local · offline</span></div>
+    </div>
+    <nav id="nav">
+      <button class="nav-item active" data-view="board">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="6" height="16" rx="1.5"/><rect x="10.5" y="4" width="6" height="11" rx="1.5"/><rect x="18" y="4" width="3" height="7" rx="1.2"/></svg>
+        投递看板<span class="badge" id="navBadge" hidden>0</span>
+      </button>
+      <button class="nav-item" data-view="jobs">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h16v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8Z"/><path d="M9 8V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V8"/></svg>
+        岗位池
+      </button>
+      <button class="nav-item" data-view="kb">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10l2 2.5h6.5A1.5 1.5 0 0 1 20 8v10a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18V5.5Z"/></svg>
+        知识库
+      </button>
+      <button class="nav-item" data-view="system">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"/></svg>
+        环境自检
+      </button>
+    </nav>
+    <div class="side-foot">
+      <div><b id="footName">—</b></div>
+      <div id="footSub">正在读取档案…</div>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div>
+        <h1 id="viewTitle">投递看板</h1>
+        <p id="viewSub">今天该做什么，一眼看完</p>
+      </div>
+      <div class="actions" id="topActions"></div>
+    </header>
+    <section class="view" id="view"></section>
+  </main>
+</div>
+
+<div id="toast"></div>
+<div class="modal" id="modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="modalTitle">预览</h3>
+      <button class="icon-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// 内联 onclick 里的字符串参数：必须走 JSON.stringify 再转义。
+// 直接用 '${path}' 会把 Windows 路径里的 \r \n 当成转义字符，简历预览就废了
+const arg = (v) => esc(JSON.stringify(String(v ?? "")));
+const state = { data: null, view: "board", busy: false, expanded: {} };
+
+/* ------------------------------------------------ 通信 */
+async function api(path, body) {
+  const opt = body === undefined ? {} : {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  };
+  const res = await fetch(path, opt);
+  let data;
+  try { data = await res.json(); } catch { throw new Error(`服务端返回非 JSON（${res.status}）`); }
+  if (!data.ok && data.error) throw new Error(data.error);
+  return data;
+}
+
+function toast(msg, kind = "") {
+  const el = document.createElement("div");
+  el.className = "toast " + kind;
+  el.textContent = msg;
+  $("#toast").appendChild(el);
+  setTimeout(() => { el.style.opacity = "0"; el.style.transition = ".3s"; }, 2400);
+  setTimeout(() => el.remove(), 2800);
+}
+
+async function act(fn, okMsg) {
+  if (state.busy) return;
+  state.busy = true;
+  document.body.style.cursor = "progress";
+  try {
+    const r = await fn();
+    if (okMsg) toast(okMsg, "ok");
+    await refresh();
+    return r;
+  } catch (e) {
+    toast(e.message || "操作失败", "err");
+    return null;
+  } finally {
+    state.busy = false;
+    document.body.style.cursor = "";
+  }
+}
+
+/* ------------------------------------------------ 数据 */
+async function refresh() {
+  const data = await api("/api/overview");
+  state.data = data;
+  render();
+}
+
+/* ------------------------------------------------ 渲染入口 */
+const TITLES = {
+  board: ["投递看板", "今天该做什么，一眼看完"],
+  jobs: ["岗位池", "目标岗位与导师，匹配后再决定投不投"],
+  kb: ["知识库", "项目资料抽成可溯源的成就单元"],
+  system: ["环境自检", "依赖、档案、模型与可选能力"],
+};
+
+function render() {
+  const d = state.data;
+  if (!d) return;
+  $("#viewTitle").textContent = TITLES[state.view][0];
+  $("#viewSub").textContent = TITLES[state.view][1];
+
+  const hot = d.board.alerts.filter(it => it.alerts.some(a => a.level === "error")).length;
+  const badge = $("#navBadge");
+  badge.hidden = !hot;
+  badge.textContent = hot;
+
+  $("#footName").textContent = d.profile.ok ? (d.profile.name || "未填姓名") : "档案未就绪";
+  $("#footSub").textContent = d.profile.ok
+    ? [d.profile.school, d.profile.major].filter(Boolean).join(" · ") || "补全 profile.yaml"
+    : "补全 data/profile.yaml";
+
+  $("#topActions").innerHTML = topActions();
+  const v = $("#view");
+  if (state.view === "board") v.innerHTML = viewBoard(d);
+  else if (state.view === "jobs") v.innerHTML = viewJobs(d);
+  else if (state.view === "kb") v.innerHTML = viewKb(d);
+  else v.innerHTML = viewSystem(d);
+  if (state.view === "kb") loadReview();
+}
+
+function topActions() {
+  const d = state.data;
+  const items = [];
+  if (state.view === "kb") {
+    items.push(`<button class="btn btn-ghost" onclick="buildKb(false)">增量抽取</button>`);
+    items.push(`<button class="btn btn-primary" onclick="buildKb(true)">全量重抽</button>`);
+  }
+  if (state.view === "jobs") {
+    items.push(`<button class="btn btn-primary" onclick="openNewJob()">＋ 录入岗位</button>`);
+  }
+  if (state.view === "board") {
+    items.push(`<button class="btn btn-ghost" onclick="openBoardPage()">打开看板页</button>`);
+  }
+  items.push(`<button class="btn btn-ghost" onclick="act(refresh)">刷新</button>`);
+  return items.join("");
+}
+
+/* ------------------------------------------------ 看板 */
+function viewBoard(d) {
+  const f = d.board.funnel || {};
+  const stats = [`<div class="stat"><b>${d.board.total}</b><span>投递记录</span></div>`];
+  for (const k of Object.keys(f)) {
+    const x = f[k];
+    stats.push(`<div class="stat"><b>${x.sent}</b><span>${esc(x.label)}已投出</span></div>`);
+    if (x.sent) stats.push(`<div class="stat"><b>${x.reply_rate}</b><span>${esc(x.label)}回复率</span></div>`);
+  }
+  stats.push(`<div class="stat"><b>${d.kb.evidence_count}</b><span>证据条目</span></div>`);
+  const hot = d.board.alerts.filter(it => it.alerts.some(a => a.level === "error")).length;
+  if (hot) stats.push(`<div class="stat hot"><b>${hot}</b><span>必须处理</span></div>`);
+
+  const cols = d.board.columns.map(col => {
+    const cards = col.items.length ? col.items.map(cardHtml).join("") : `<div class="empty">这一栏是空的</div>`;
+    return `<div class="col">
+      <div class="col-head"><h3>${esc(col.title)}</h3><em>${col.count}</em></div>
+      <div class="col-body">${cards}</div>
+    </div>`;
+  }).join("");
+
+  const sampleBanner = d.profile.example ? `
+    <div class="panel" style="border-left:3px solid var(--warn)">
+      <div class="panel-head"><h3>现在用的是示例档案</h3>
+      <span class="sub">data/profile.yaml 里还是「${esc(d.profile.name)}」·${esc(d.profile.school || "")}，改完再生成简历</span></div>
+    </div>` : "";
+
+  const banner = !d.board.total ? `
+    <div class="panel" style="border-left:3px solid var(--brand)">
+      <div class="panel-head"><h3>还没有投递记录</h3><span class="sub">三步就能跑起来</span></div>
+      <div class="kv">
+        <div><span>1 · 放资料</span><b>workspace/projects/ 一个项目一个文件夹</b></div>
+        <div><span>2 · 抽知识库</span><b>知识库页 → 全量重抽</b></div>
+        <div><span>3 · 录岗位</span><b>岗位池 → 录入岗位 → 匹配 → 生成</b></div>
+      </div>
+    </div>` : "";
+
+  return `<div class="stats">${stats.join("")}</div>${sampleBanner}${banner}
+    <div class="board">${cols}</div>`;
+}
+
+function cardHtml(it) {
+  const alerts = (it.alerts || []).map(a => `<div class="alert ${a.level}">${esc(a.text)}</div>`).join("");
+  const chips = [];
+  if (it.kind === "baoyan") chips.push(`<span class="chip brand">保研</span>`);
+  else chips.push(`<span class="chip">实习</span>`);
+  if (it.days_in_status) chips.push(`<span class="chip">${it.days_in_status} 天未动</span>`);
+  if (it.days_left !== null && it.days_left !== undefined && it.days_left >= 0)
+    chips.push(`<span class="chip ${it.days_left <= 3 ? "err" : ""}">${it.days_left} 天截止</span>`);
+  if (it.pdf) chips.push(`<span class="chip ok">PDF 就绪</span>`);
+
+  const canGen = ["draft", "matched"].includes(it.status);
+  const canAdvance = (it.allowed || []).length > 0;
+
+  return `<div class="card">
+    <div class="card-top">
+      <span class="dot ${esc(it.status)}"></span>
+      <div style="min-width:0">
+        <h4>${esc(it.title)}</h4>
+        <div class="org">${esc(it.org || it.mentor || "—")}</div>
+      </div>
+    </div>
+    <div class="meta">${chips.join("")}</div>
+    ${alerts ? `<div class="alerts">${alerts}</div>` : ""}
+    <div class="next">下一步 · <b>${esc(it.next || "—")}</b></div>
+    <div class="card-actions">
+      ${canGen ? `<button class="btn btn-ghost btn-tiny" onclick="event.stopPropagation();doGen(${arg(it.job_id)})">生成简历</button>` : ""}
+      ${canAdvance ? `<button class="btn btn-ghost btn-tiny" onclick="event.stopPropagation();openAdvance(${arg(it.app_id)})">推进状态</button>` : ""}
+      <button class="btn btn-ghost btn-tiny" onclick="event.stopPropagation();openNote(${arg(it.app_id)})">记一笔</button>
+      ${it.pdf ? `<button class="btn btn-ok btn-tiny" onclick="event.stopPropagation();previewPdf(${arg(it.pdf)})">看 PDF</button>` : ""}
+    </div>
+  </div>`;
+}
+
+/* ------------------------------------------------ 岗位池 */
+function viewJobs(d) {
+  const rows = d.jobs.map(j => {
+    const open = state.expanded[j.id];
+    return `<div class="row" style="align-items:flex-start">
+      <div style="min-width:0">
+        <div class="t">${esc(j.title || "（未命名）")}</div>
+        <div class="s">${esc(j.org || "—")} · ${j.kind === "baoyan" ? "保研" : "实习"} · ${j.requirements} 条要求${j.deadline ? " · 截止 " + esc(j.deadline) : ""}</div>
+        <div class="s mono" style="opacity:.6">${esc(j.id)}</div>
+        ${open ? `<div id="m-${j.id}" class="mt"></div>` : ""}
+      </div>
+      <div class="r">
+        <button class="btn btn-ghost btn-tiny" onclick="doMatch(${arg(j.id)})">匹配</button>
+        <button class="btn btn-ghost btn-tiny" onclick="doGen(${arg(j.id)})">生成简历</button>
+        <button class="btn btn-ghost btn-tiny" onclick="doLetter(${arg(j.id)}, ${arg(j.kind)})">${j.kind === "baoyan" ? "套磁信" : "开场白"}</button>
+      </div>
+    </div>`;
+  }).join("") || `<div class="empty" style="margin:16px">岗位池是空的。点右上角「录入岗位」，或先跑一次 kb build。</div>`;
+
+  return `<div class="panel">
+    <div class="panel-head"><h3>岗位 / 导师</h3><span class="sub">${d.jobs.length} 个目标</span></div>
+    <div class="rows">${rows}</div>
+  </div>`;
+}
+
+/* ------------------------------------------------ 知识库 */
+function viewKb(d) {
+  const kb = d.kb;
+  const kinds = Object.entries(kb.by_kind || {}).map(([k, n]) => `<span class="chip">${esc(k)} ${n}</span>`).join(" ");
+  const broken = (kb.broken_files || []).map(b => `<div class="alert error">${esc(b.file)}：${esc(b.error)}</div>`).join("");
+
+  return `<div class="stats">
+      <div class="stat"><b>${kb.evidence_count}</b><span>证据条目</span></div>
+      <div class="stat"><b>${kb.total_metrics}</b><span>量化指标</span></div>
+      <div class="stat ${kb.missing_source_metrics ? "hot" : ""}"><b>${kb.missing_source_metrics}</b><span>指标缺出处</span></div>
+      <div class="stat"><b>${d.templates.length}</b><span>简历模板</span></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>构成</h3><span class="sub">${kinds || "还没有证据"}</span></div>
+      ${broken ? `<div class="kv" style="display:block">${broken}</div>` : ""}
+      <div class="kv">
+        <div><span>语义召回</span><b>${d.embed.enabled ? "已启用 · " + esc(d.embed.model) : "未启用（BM25）"}</b></div>
+        <div><span>已缓存向量</span><b>${d.embed.cache_vectors}</b></div>
+        <div><span>扫描件 OCR</span><b>${d.doctor.checks.find(c => c.name.startsWith("OCR"))?.name || "未启用"}</b></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>校对清单</h3><span class="sub">抽取是模型做的，这几类错必须人工过一眼</span></div>
+      <div id="reviewBox"><div class="loading"><span class="spinner"></span>正在检查…</div></div>
+    </div>`;
+}
+
+async function loadReview() {
+  const box = $("#reviewBox");
+  if (!box) return;
+  try {
+    const r = await api("/api/kb/review");
+    if (!r.findings || !r.findings.length) {
+      box.innerHTML = `<div class="empty" style="margin:16px">没有发现疑点。</div>`;
+      return;
+    }
+    box.innerHTML = `<div class="rows">` + r.findings.map(f => `
+      <div class="row">
+        <div><div class="t">${esc(f.title || f.evidence_id)}</div>
+        <div class="s">${esc(f.message)}${f.suggestion ? " · " + esc(f.suggestion) : ""}</div></div>
+        <div class="r"><span class="chip ${f.level === "warn" ? "warn" : ""}">${esc(f.field)}</span></div>
+      </div>`).join("") + `</div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="empty" style="margin:16px">${esc(e.message)}</div>`;
+  }
+}
+
+/* ------------------------------------------------ 自检 */
+function viewSystem(d) {
+  const icon = { ok: "✓", warn: "!", fail: "✗", info: "·" };
+  const cls = { ok: "ok", warn: "warn", fail: "err", info: "" };
+  const rows = d.doctor.checks.map(c => `
+    <div class="row">
+      <div><div class="t">${esc(c.name)}</div>
+      ${c.detail ? `<div class="s">${esc(c.detail)}</div>` : ""}
+      ${c.fix ? `<div class="s" style="color:var(--muted)">→ ${esc(c.fix)}</div>` : ""}</div>
+      <div class="r"><span class="chip ${cls[c.level]}">${icon[c.level]} ${c.level}</span></div>
+    </div>`).join("");
+  return `<div class="stats">
+      <div class="stat ${d.doctor.failed ? "hot" : "good"}"><b>${d.doctor.failed}</b><span>必须处理</span></div>
+      <div class="stat"><b>${d.doctor.warned}</b><span>建议处理</span></div>
+      <div class="stat"><b>${d.doctor.checks.length}</b><span>检查项</span></div>
+    </div>
+    <div class="panel"><div class="panel-head"><h3>自检结果</h3><span class="sub mono">${esc(d.doctor.root)}</span></div>
+    <div class="rows">${rows}</div></div>`;
+}
+
+/* ------------------------------------------------ 动作 */
+async function buildKb(force) {
+  await act(async () => {
+    const r = await api("/api/kb/build", { force });
+    const n = (r.created || []).length;
+    toast(force ? `全量重抽完成，${n} 个文件夹` : `增量抽取完成，${n} 个新文件夹`, "ok");
+    return r;
+  });
+}
+
+async function doMatch(jobId) {
+  await act(async () => {
+    const r = await api(`/api/jobs/${encodeURIComponent(jobId)}/match`, {});
+    const hits = (r.report?.hits) || r.hits || [];
+    toast(`匹配完成，${hits.length} 条对口`, "ok");
+    state.lastMatch = { jobId, hits, gaps: (r.report?.gaps || r.gaps || []) };
+    openMatchModal(jobId);
+  });
+}
+
+async function doGen(jobId, template) {
+  const tpl = template || "single_column";
+  await act(async () => {
+    const r = await api(`/api/jobs/${encodeURIComponent(jobId)}/gen`, { template: tpl });
+    if (r.pdf_path) {
+      toast(`简历已生成 · ${r.pages || "?"} 页 · ${r.lint?.stats?.errors ?? 0} 错误`, "ok");
+      previewPdf(r.pdf_path);
+    } else {
+      toast(r.hint || "PDF 没生成出来", "err");
+    }
+    return r;
+  });
+}
+
+async function doLetter(jobId, kind) {
+  await act(async () => {
+    const path = kind === "baoyan" ? "letter" : "pitch";
+    const r = await api(`/api/jobs/${encodeURIComponent(jobId)}/${path}`, {});
+    const text = r.letter?.body || r.pitch?.full || JSON.stringify(r).slice(0, 400);
+    openTextModal(kind === "baoyan" ? "套磁信" : "开场白", text, r.letter?.warnings || r.pitch?.warnings || []);
+    return r;
+  });
+}
+
+/* ------------------------------------------------ 弹层 */
+function openModal(title, html) {
+  $("#modalTitle").textContent = title;
+  $("#modalBody").innerHTML = html;
+  $("#modal").classList.add("open");
+}
+function closeModal() { $("#modal").classList.remove("open"); }
+$("#modal").addEventListener("click", e => { if (e.target.id === "modal") closeModal(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
+
+function previewPdf(path) {
+  // 传完整路径：多个投递的 PDF 都叫 resume.pdf，按文件名取会拿到别人的简历
+  openModal("简历预览", `<iframe src="/api/file?path=${encodeURIComponent(path)}"></iframe>
+    <div class="s muted" style="margin-top:10px">${esc(path)}</div>`);
+}
+
+function openMatchModal(jobId) {
+  const m = state.lastMatch;
+  if (!m || m.jobId !== jobId) return;
+  const hits = m.hits.map(h => `<div class="row">
+      <div><div class="t">${esc(h.title)} <span class="chip brand">${h.score}</span></div>
+      <div class="s">${esc(h.reason || "")}</div></div>
+      <div class="r">${(h.matched_keywords || []).slice(0, 4).map(k => `<span class="chip">${esc(k)}</span>`).join("")}</div>
+    </div>`).join("") || `<div class="empty">没有达到阈值的对口经历</div>`;
+  const gaps = m.gaps.length ? `<div class="sep"></div><div class="s muted">能力缺口：${m.gaps.map(esc).join("、")}</div>` : "";
+  openModal("匹配结果", `<div class="rows">${hits}</div>${gaps}`);
+}
+
+function openTextModal(title, text, warns) {
+  const w = (warns || []).length
+    ? `<div class="sep"></div>` + warns.map(x => `<div class="alert warn">${esc(x)}</div>`).join("")
+    : "";
+  openModal(title, `<div style="white-space:pre-wrap;line-height:1.8">${esc(text)}</div>${w}`);
+}
+
+function openAdvance(appId) {
+  const d = state.data;
+  const app = d.apps.find(a => a.id === appId);
+  const item = d.board.items.find(i => i.app_id === appId);
+  const allowed = item?.allowed || [];
+  const opts = allowed.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join("");
+  openModal("推进状态", `
+    <div class="field"><label>当前状态</label><input value="${esc(item?.status_label || app?.status || "")}" disabled></div>
+    <div class="field"><label>推进到</label><select id="advTo">${opts}</select></div>
+    <div class="field"><label>备注（可选）</label><input id="advNote" placeholder="如：HR 说下周约面"></div>
+    <button class="btn btn-primary" onclick="submitAdvance(${arg(appId)})">确认推进</button>`);
+}
+
+async function submitAdvance(appId) {
+  const to = $("#advTo").value, note = $("#advNote").value;
+  closeModal();
+  await act(async () => api(`/api/apps/${encodeURIComponent(appId)}/advance`, { to_status: to, note }), "状态已推进");
+}
+
+function openNote(appId) {
+  openModal("记一笔", `
+    <div class="field"><label>备注</label><textarea id="noteText" placeholder="HR 说了什么、约了几点、面试问了什么"></textarea></div>
+    <button class="btn btn-primary" onclick="submitNote(${arg(appId)})">保存</button>`);
+}
+
+async function submitNote(appId) {
+  const note = $("#noteText").value.trim();
+  if (!note) { toast("备注不能为空", "err"); return; }
+  closeModal();
+  await act(async () => api(`/api/apps/${encodeURIComponent(appId)}/note`, { note }), "已记录");
+}
+
+function openBoardPage() {
+  act(async () => {
+    await api("/api/board", {});
+    toast("看板页已生成：data/board.html", "ok");
+  });
+}
+
+function openNewJob() {
+  openModal("录入岗位", `
+    <div class="grid2">
+      <div class="field"><label>类型</label>
+        <select id="njKind"><option value="internship">实习</option><option value="baoyan">保研套磁</option></select></div>
+      <div class="field"><label>公司 / 学院</label><input id="njOrg" placeholder="某互联网公司"></div>
+      <div class="field"><label>岗位 / 方向</label><input id="njTitle" placeholder="推荐算法实习生"></div>
+      <div class="field"><label>导师（保研必填）</label><input id="njMentor" placeholder="张老师"></div>
+    </div>
+    <div class="field"><label>JD 正文（粘贴）</label><textarea id="njText" placeholder="岗位职责 / 任职要求…"></textarea></div>
+    <button class="btn btn-primary" onclick="submitJob()">保存并解析</button>`);
+}
+
+async function submitJob() {
+  const body = {
+    kind: $("#njKind").value,
+    org: $("#njOrg").value.trim(),
+    title: $("#njTitle").value.trim(),
+    mentor: $("#njMentor").value.trim(),
+    raw_text: $("#njText").value.trim(),
+  };
+  if (!body.raw_text) { toast("JD 正文不能为空", "err"); return; }
+  closeModal();
+  await act(async () => api("/api/jobs", body), "岗位已录入");
+}
+
+/* ------------------------------------------------ 启动 */
+$("#nav").addEventListener("click", e => {
+  const btn = e.target.closest(".nav-item");
+  if (!btn) return;
+  document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  state.view = btn.dataset.view;
+  render();
+  if (state.view === "kb") loadReview();
+});
+
+refresh().catch(e => {
+  $("#view").innerHTML = `<div class="empty">读不到数据：${esc(e.message)}</div>`;
+});
+setInterval(() => { if (!state.busy && !document.hidden) refresh().catch(() => {}); }, 20000);
+</script>
+</body>
+</html>

@@ -248,6 +248,36 @@ def _check_templates() -> Check:
     return Check("ok", f"模板 {len(items)} 套", "、".join(t["key"] for t in items))
 
 
+def _check_embed() -> Check:
+    """语义召回是可选项：没装不算问题，装了要能说清用的是哪个模型。"""
+    from .match import embed
+
+    ok, why = embed.available()
+    if not ok:
+        return Check(
+            "info",
+            "语义召回未启用",
+            why,
+            "只用 BM25（词面匹配）。要抓同义不同词（「个性化排序」↔「推荐系统」）：pip install sentence-transformers",
+        )
+    info = embed.info()
+    return Check("ok", f"语义召回 {why}", f"已缓存 {info['cache_vectors']} 条向量")
+
+
+def _check_ocr() -> Check:
+    from .kb import ocr
+
+    ok, why = ocr.available()
+    if not ok:
+        return Check(
+            "info",
+            "OCR 未启用",
+            why,
+            "扫描件 PDF / 截图会读不到。要启用：pip install rapidocr-onnxruntime",
+        )
+    return Check("ok", f"OCR {why}")
+
+
 def run() -> dict:
     """跑完所有检查，返回结构化结果。"""
     checks: list[Check] = [_check_python()]
@@ -259,6 +289,8 @@ def run() -> dict:
     checks.append(_check_writable())
     checks.append(_check_evidence())
     checks.append(_check_templates())
+    checks.append(_check_embed())
+    checks.append(_check_ocr())
 
     fails = [c for c in checks if c.level == "fail"]
     warns = [c for c in checks if c.level == "warn"]
@@ -275,7 +307,8 @@ def to_text(res: dict) -> str:
     lines = [f"环境自检 · {res['root']}", "─" * 56]
     checks = res["checks"]
     for c in checks:
-        icon = {"ok": "✓", "warn": "!", "fail": "✗"}[c["level"]]
+        # info 是「可选能力没启用」，既不是 ok 也不是要修的问题，单独一个符号
+        icon = {"ok": "✓", "warn": "!", "fail": "✗", "info": "·"}[c["level"]]
         line = f"  {icon} {c['name']}"
         if c["detail"]:
             line += f" — {c['detail']}"

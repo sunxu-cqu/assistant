@@ -449,6 +449,21 @@ def board_cmd(
         webbrowser.open(Path(res["html_path"]).resolve().as_uri())
 
 
+@app.command("ui")
+def ui_cmd(
+    port: int = typer.Option(8765, "--port", "-p", help="监听端口"),
+    open_browser: bool = typer.Option(True, "--open/--no-open", help="启动后自动打开浏览器"),
+) -> None:
+    """打开本地界面（看板 / 岗位池 / 知识库 / 自检）。"""
+    from .web.server import serve
+
+    try:
+        serve(port=port, open_browser=open_browser)
+    except OSError as exc:
+        typer.secho(f"端口 {port} 起不来：{exc}。换个端口：resume ui -p 8766", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+
+
 def main() -> None:
     try:
         sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]

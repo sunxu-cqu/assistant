@@ -91,22 +91,29 @@ def _read_text_file(path: Path) -> tuple[str, str, str]:
     return text, enc, ""
 
 
-def _read_pdf(path: Path) -> tuple[str, str]:
+def _read_pdf(path: Path) -> tuple[str, str, str]:
+    """返回 (文本, 编码标记, 失败原因)。编码标记为 "ocr" 表示文字来自 OCR。"""
     try:
         import pdfplumber
     except ImportError:
-        return "", "缺少 pdfplumber，无法读 PDF"
+        return "", "", "缺少 pdfplumber，无法读 PDF"
     out: list[str] = []
     try:
         with pdfplumber.open(str(path)) as pdf:
             for page in pdf.pages[:MAX_PDF_PAGES]:
                 out.append(page.extract_text() or "")
     except Exception as exc:  # noqa: BLE001
-        return "", f"PDF 打开失败：{type(exc).__name__}"
+        return "", "", f"PDF 打开失败：{type(exc).__name__}"
     text = "\n".join(out)
     if not text.strip():
-        return "", "PDF 没有文字层（扫描件/图片版），P0 不支持 OCR"
-    return text, ""
+        # 没有文字层 = 扫描件。装了 OCR 就识别一遍，没装才报「读不到」
+        from . import ocr
+
+        ocr_text, why = ocr.read_pdf(path)
+        if ocr_text.strip():
+            return ocr_text, "ocr", ""
+        return "", "", why or "PDF 没有文字层（扫描件/图片版），且未启用 OCR"
+    return text, "", ""
 
 
 def _read_docx(path: Path) -> tuple[str, str]:
@@ -206,8 +213,8 @@ def read_file(path: Path) -> tuple[str, str, str]:
         if suffix in TEXT_SUFFIXES:
             return _read_text_file(path)
         if suffix == ".pdf":
-            text, why = _read_pdf(path)
-            return text, "", why
+            text, enc, why = _read_pdf(path)
+            return text, enc, why
         if suffix in {".docx", ".doc"}:
             text, why = _read_docx(path)
             return text, "", why
@@ -222,7 +229,10 @@ def read_file(path: Path) -> tuple[str, str, str]:
         if suffix in {".xls", ".et"}:
             return "", "", "老版 .xls 打不开，请另存为 .xlsx 后重试"
         if suffix in IMAGE_SUFFIXES:
-            return "", "", "图片没有文字层，P0 不支持 OCR（重要内容请手动写进 md）"
+            from . import ocr
+
+            text, why = ocr.read_image(path)
+            return text, ("ocr" if text else ""), why
         if suffix in ARCHIVE_SUFFIXES:
             return "", "", "压缩包不解压，请解压后放入文件夹"
     except Exception as exc:  # noqa: BLE001
