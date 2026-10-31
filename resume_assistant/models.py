@@ -75,7 +75,20 @@ class Metric(BaseModel):
     source: str = ""
 
     def rendered(self) -> str:
-        return f"{self.value}{self.unit}"
+        """「值 + 单位」，但值里已经带单位就不重复加。
+
+        抽取器经常把「18%→9%」写进 value 又填 unit="%"，直接拼出来是「9%%」，
+        这句话会原样进 prompt，模型很可能照着抄进简历。
+        """
+        v = (self.value or "").strip()
+        u = (self.unit or "").strip()
+        if not u:
+            return v
+        if v.endswith(u):
+            return v
+        if u in ("%", "％") and ("%" in v or "％" in v):
+            return v
+        return f"{v}{u}"
 
 
 class Star(BaseModel):

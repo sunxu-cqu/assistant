@@ -475,6 +475,68 @@ def main() -> int:
     issues2 = elig_check(j2027, _prof("2022.09 ~ 2026.06")).to_list()
     check("真不符才报 fail", any(i["level"] == "fail" for i in issues2), str(issues2))
 
+    # ------------------------------------------- 13 真实资料带来的坑
+    print("\n[13] 真实资料带来的坑（备份文件夹 / 大日志 / 单位重复）")
+    from resume_assistant.compose.ir import _dedupe_evidence
+    from resume_assistant.kb.scanner import MAX_CHARS_PER_FILE, scan_folder
+    from resume_assistant.models import Metric
+
+    # 抽取器常把「18%→9%」写进 value 又填 unit="%"，拼出来是 9%%，会被模型抄进简历
+    check("value 自带 % 时不重复加单位", Metric(name="x", value="18%→9%", unit="%").rendered() == "18%→9%")
+    check("value 不带单位时正常拼接", Metric(name="x", value="3.4", unit="%").rendered() == "3.4%")
+    check("非百分比单位照常拼接", Metric(name="x", value="42", unit="ms").rendered() == "42ms")
+
+    def _ev(eid: str, title: str, claim: str, period: str = "2025.03 ~ 2025.06", metrics: int = 0) -> Evidence:
+        return Evidence(
+            id=eid,
+            kind="project",
+            title=title,
+            claim=claim,
+            period=period,
+            metrics=[Metric(name=f"m{i}", value="1", unit="个", source="x") for i in range(metrics)],
+        )
+
+    # 备份文件夹：同标题、措辞不同（LLM 两次抽取不会一字不差）
+    dup = _dedupe_evidence(
+        [
+            _ev("a", "双通道召回推荐系统", "双通道召回将冷启动点击率从 2.1% 提升至 3.4%"),
+            _ev("b", "双通道召回推荐系统", "双通道召回+热度负采样，点击率 2.1%→3.4%"),
+        ]
+    )
+    check("同标题不同措辞判为重复", len(dup) == 1, str([e.id for e in dup]))
+    keep = _dedupe_evidence(
+        [
+            _ev("a", "双通道召回推荐系统", "点击率 2.1%→3.4%", metrics=1),
+            _ev("b", "双通道召回推荐系统", "点击率 2.1%→3.4%", metrics=3),
+        ]
+    )
+    check("重复时留信息量大的那条", len(keep) == 1 and keep[0].id == "b", str([(e.id, len(e.metrics)) for e in keep]))
+    diff = _dedupe_evidence(
+        [
+            _ev("a", "双通道召回推荐系统", "点击率 2.1%→3.4%"),
+            _ev("b", "冷启动属性对齐", "NDCG 提升 11.8%"),
+        ]
+    )
+    check("不同项目不被误合并", len(diff) == 2, str([e.id for e in diff]))
+    same_title_diff = _dedupe_evidence(
+        [
+            _ev("a", "课程大作业", "用 B+ 树做前缀检索，P99 从 380ms 降到 42ms", period="2023.09 ~ 2023.12"),
+            _ev("b", "课程大作业", "用 XGBoost 做房价预测，RMSE 从 0.31 降到 0.22", period="2024.09 ~ 2024.12"),
+        ]
+    )
+    check("同名但不同项目不合并", len(same_title_diff) == 2, str([e.id for e in same_title_diff]))
+
+    # 一个 6MB 的训练日志不该把整个项目的字符预算吃光
+    big = _SANDBOX / "workspace" / "projects" / "大日志项目"
+    shutil.rmtree(big, ignore_errors=True)
+    big.mkdir(parents=True)
+    (big / "train.log").write_text("epoch 1 loss 0.9\n" * 60_000, encoding="utf-8")
+    (big / "说明.md").write_text("把召回率从 0.62 提到 0.78，用双塔模型。", encoding="utf-8")
+    pf = scan_folder(big)
+    check("单文件超过上限被截断", f"超过 {MAX_CHARS_PER_FILE} 字" in pf.text, str(pf.chars))
+    check("大日志没挤掉真正有用的文件", "0.78" in pf.text, pf.text[-200:])
+    shutil.rmtree(big, ignore_errors=True)
+
     print(f"\n{'=' * 46}")
     print(f"通过 {len(PASS)} 项，失败 {len(FAIL)} 项")
     if FAIL:

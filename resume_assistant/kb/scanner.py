@@ -28,6 +28,9 @@ SKIP_DIRS = {".git", "__pycache__", ".venv", "node_modules", ".idea", ".vscode"}
 MAX_PDF_PAGES = 40
 MAX_SHEET_ROWS = 300
 MAX_FILES_PER_FOLDER = 80
+# 单个文件最多读这么多字。项目文件夹里混进训练日志、导出的 csv 很常见，
+# 一个 6MB 的 log 就能把整个项目的字符预算吃光，真正有内容的笔记反而被截断掉
+MAX_CHARS_PER_FILE = 8000
 # 单个文件超过这个大小直接跳过：实验数据集、录屏、模型权重都会塞进项目文件夹，
 # 读进来既慢又是噪声（模型看到 5 万行 CSV 只会晕）
 MAX_FILE_MB = 20
@@ -273,7 +276,10 @@ def scan_folder(folder: Path) -> ProjectFolder:
             pf.files.append(rel)
             if enc:
                 pf.encodings[rel] = enc
-            chunks.append(f"\n\n===== 文件：{rel} =====\n{text.strip()}")
+            body = text.strip()
+            if len(body) > MAX_CHARS_PER_FILE:
+                body = body[:MAX_CHARS_PER_FILE] + f"\n[本文件超过 {MAX_CHARS_PER_FILE} 字，已截断]"
+            chunks.append(f"\n\n===== 文件：{rel} =====\n{body}")
         else:
             pf.skipped.append({"file": rel, "reason": why or "没有读到文字"})
 

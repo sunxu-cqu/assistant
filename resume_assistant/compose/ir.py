@@ -105,6 +105,40 @@ def _dedupe_bullets(bullets: list[Bullet]) -> list[Bullet]:
     return kept
 
 
+def _dedupe_evidence(evs: list[Evidence]) -> list[Evidence]:
+    """同一个项目被抽出两条时只留一条。
+
+    真实资料里「XX 备份」「XX (旧)」这类文件夹很常见，两个文件夹会抽出两条
+    同标题的证据，措辞略有不同（LLM 两次抽取不会一字不差）。简历上同一个项目
+    出现两遍，比少一个项目难解释得多——而 review 只会提醒，挡不住已经生成的版本。
+
+    判重不看 id：标题归一化后相同，且「时间段相同」或「claim 相似度 ≥ 0.5」即算同一条。
+    """
+    import re as _re
+
+    def norm(s: str) -> str:
+        return _re.sub(r"\s+", "", s or "")
+
+    def info(e: Evidence) -> float:
+        return len(e.metrics) * 2 + len(e.claim or "") / 50.0
+
+    out: list[Evidence] = []
+    for e in evs:
+        dup_at = None
+        for i, k in enumerate(out):
+            if norm(e.title) != norm(k.title):
+                continue
+            same_period = bool((e.period or "").strip()) and norm(e.period) == norm(k.period)
+            if same_period or _similar(e.claim or "", k.claim or "") >= 0.5:
+                dup_at = i
+                break
+        if dup_at is None:
+            out.append(e)
+        elif info(e) > info(out[dup_at]):
+            out[dup_at] = e
+    return out
+
+
 def _edu_section(profile: Profile, spec_title: str) -> IRSection | None:
     if not profile.education:
         return None
@@ -301,6 +335,8 @@ def compose(
                 for h in report.hits
                 if h.evidence_id in by_id and h.evidence_id not in used_ids
             ]
+            # 备份文件夹抽出来的孪生证据先并掉，否则「项目经历」里同一个项目占两格
+            pool = _dedupe_evidence(pool)
             if spec.include_kinds is not None:
                 filtered = [e for e in pool if e.kind in spec.include_kinds]
                 # experience 语义严格：没有对应类型的经历就整段不出现，

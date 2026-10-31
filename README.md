@@ -485,7 +485,7 @@ draft → matched → composed → sent → screening → interview → offer
 set RESUME_ASSISTANT_MOCK=1
 ./.venv/Scripts/python.exe tests/smoke.py
 
-# 边界测试（87 项断言：非法输入 / 损坏 YAML / 并发 / 超大文件 / 数字闸门 / 资格校验 / CLI 退出码）
+# 边界测试（96 项断言：非法输入 / 损坏 YAML / 并发 / 超大文件 / 数字闸门 / 资格校验 / CLI 退出码）
 ./.venv/Scripts/python.exe tests/edge_cases.py
 
 # CLI 全命令冒烟（77 项断言：每个子命令的 --help / 只读 / 错误输入 / 写命令正路）
@@ -502,6 +502,9 @@ set RESUME_ASSISTANT_MOCK=1
 
 # 真实 API 端到端（沙箱隔离，不碰你的真实 data/）
 ./.venv/Scripts/python.exe tests/e2e_real.py
+
+# 真实 API · 像真人资料一样的 8 个文件夹（一个项目多文件 / 备份文件夹 / docx 表格 / 大日志 / 扫描件）
+./.venv/Scripts/python.exe tests/e2e_folders.py
 ```
 
 `smoke.py` 与 `e2e_real.py` 都用 `RESUME_ASSISTANT_DATA` / `RESUME_ASSISTANT_WORKSPACE` 指向 `tests/sandbox/`。
@@ -522,6 +525,9 @@ set RESUME_ASSISTANT_MOCK=1
 | 校验闸门拦截编造数字 / 虚假 evidence_id | 通过 |
 | 数字溯源不误杀型号数字（V100）与未入 metrics 的真实数字 | 通过 |
 | 比例数字（8.7% / 3 倍）不论大小都要出处；「3 个项目」这类计数不误报 | 通过 |
+| 指标单位不重复（value 已带 % 时不再拼成 9%%） | 通过 |
+| 备份文件夹抽出的孪生证据在简历里只出现一次 | 通过 |
+| 单文件字符上限：6MB 训练日志挤不掉项目里的说明文件 | 通过 |
 | PDF 页数上报：实习超 1 页 / 保研超 2 页给提醒 | 通过 |
 | Typst 渲染中文 PDF（两套模板，单页） | 通过 |
 | 字号自适应（页数不变前提下放大，等比推导标题） | 通过 |
@@ -549,5 +555,6 @@ set RESUME_ASSISTANT_MOCK=1
 | MCP stdio 握手 + 23 个工具 | 通过 |
 
 真实 API 端到端跑通 5 个岗位（3 实习 + 2 保研），简历全部 0 错误生成，2 封套磁信 0 编造风险。
+另有一组「像真人资料」的 8 个文件夹（多文件项目 / 备份文件夹 / docx 表格 / 6MB 日志 / 25MB csv / 扫描件 / GBK 笔记）跑通全流程：8 条证据，实习 1 页、保研 1 页，均 0 错误。
 
 
