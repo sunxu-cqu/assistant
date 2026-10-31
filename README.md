@@ -529,7 +529,7 @@ set RESUME_ASSISTANT_MOCK=1
 # MCP 协议握手（initialize / tools/list / tools/call / 错误路径 / stderr 干净度）
 ./.venv/Scripts/python.exe tests/test_mcp.py
 
-# 界面层（页面能开 / 数据能拿 / 动作能执行 / 越界访问被挡）
+# 界面层（页面能开 / 数据能拿 / 动作能执行 / 越界访问被挡 / 前端渲染 53 项）
 ./.venv/Scripts/python.exe tests/web_smoke.py
 
 # 模板排版预览（假数据渲染两套模板，产出 data/output/_preview/*.pdf）
@@ -594,6 +594,7 @@ set RESUME_ASSISTANT_MOCK=1
 | 语义召回：装了走融合、没装退回 BM25、编码器抛异常也不影响匹配 | 通过 |
 | OCR：没装时给出启用方法；装了就按页识别（用假引擎验证过整条链路） | 通过 |
 | 本地界面：页面能开、数据能拿、动作能执行、越界访问被挡、8 并发稳定 | 通过 |
+| 前端渲染：不开浏览器跑内联脚本，有告警 / 有截止 / 有 PDF / OCR 开关两种状态都渲染正确 | 通过 |
 
 真实 API 端到端跑通 5 个岗位（3 实习 + 2 保研），简历全部 0 错误生成，2 封套磁信 0 编造风险。
 另有一组「像真人资料」的 8 个文件夹（多文件项目 / 备份文件夹 / docx 表格 / 6MB 日志 / 25MB csv / 扫描件 / GBK 笔记）跑通全流程：8 条证据，实习 1 页、保研 1 页，均 0 错误。

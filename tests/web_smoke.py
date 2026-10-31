@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -196,6 +197,31 @@ def main() -> int:
     for th in threads:
         th.join()
     check("8 并发请求全 200", results.count(200) == 8, str(results))
+
+    # ---- 前端渲染：不开浏览器，用 node 直接跑 ui.html 的内联脚本 ----
+    # 截图通道在这台机器上不可用（Edge 无头产不出文件），只能退一步验证
+    # 「有数据时渲染函数不崩、字段没取错」。空数据会掩盖「字段名写错」——
+    # 那种错接口照样 200，页面上是 undefined。
+    print("\n[9] 前端渲染探针")
+    node = shutil.which("node")
+    if not node:
+        print("  skip 没装 node，跳过（不影响其它项）")
+    else:
+        snap = SB / "overview.json"
+        with urllib.request.urlopen(base + "/api/overview", timeout=20) as r:
+            snap.write_text(r.read().decode("utf-8"), encoding="utf-8")
+        proc = subprocess.run(
+            [node, str(ROOT / "tests" / "ui_render.js"), str(snap)],
+            cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8",
+        )
+        out = proc.stdout or ""
+        lines = [ln.strip() for ln in out.splitlines() if ln.strip().startswith(("ok", "FAIL"))]
+        for ln in lines:
+            name = ln[2:].strip() if ln.startswith("ok") else ln[4:].strip()
+            check(f"渲染 · {name}", ln.startswith("ok"))
+        check("渲染探针跑到最后", "失败" in out and proc.returncode == 0, (proc.stderr or "")[-400:])
+        if not lines:
+            check("渲染探针有输出", False, (proc.stderr or "")[-400:])
 
     srv.shutdown()
     srv.server_close()

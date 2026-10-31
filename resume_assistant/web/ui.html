@@ -245,6 +245,7 @@
   }
 
   .muted{color:var(--muted)}
+  .mt{margin-top:10px}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
   .sep{height:1px;background:var(--line-2);margin:14px 0}
 
@@ -519,6 +520,9 @@ function viewKb(d) {
   const kb = d.kb;
   const kinds = Object.entries(kb.by_kind || {}).map(([k, n]) => `<span class="chip">${esc(k)} ${n}</span>`).join(" ");
   const broken = (kb.broken_files || []).map(b => `<div class="alert error">${esc(b.file)}：${esc(b.error)}</div>`).join("");
+  // 取的是检查项的 level，不是 name —— 名字永远叫「OCR」，显示出来看不出开没开
+  const ocr = (d.doctor.checks || []).find(c => c.name.startsWith("OCR"));
+  const ocrText = !ocr ? "未检测" : (ocr.level === "ok" ? `已启用 · ${ocr.detail || ""}`.trim() : "未启用（读不到扫描件）");
 
   return `<div class="stats">
       <div class="stat"><b>${kb.evidence_count}</b><span>证据条目</span></div>
@@ -532,7 +536,7 @@ function viewKb(d) {
       <div class="kv">
         <div><span>语义召回</span><b>${d.embed.enabled ? "已启用 · " + esc(d.embed.model) : "未启用（BM25）"}</b></div>
         <div><span>已缓存向量</span><b>${d.embed.cache_vectors}</b></div>
-        <div><span>扫描件 OCR</span><b>${d.doctor.checks.find(c => c.name.startsWith("OCR"))?.name || "未启用"}</b></div>
+        <div><span>扫描件 OCR</span><b>${esc(ocrText)}</b></div>
       </div>
     </div>
     <div class="panel">

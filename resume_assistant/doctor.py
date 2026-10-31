@@ -55,7 +55,7 @@ class Check:
     fix: str = ""
 
     def line(self) -> str:
-        icon = {"ok": "✓", "warn": "!", "fail": "✗"}[self.level]
+        icon = {"ok": "✓", "warn": "!", "fail": "✗", "info": "·"}[self.level]
         out = f"  {icon} {self.name}"
         if self.detail:
             out += f" — {self.detail}"
