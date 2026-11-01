@@ -24,7 +24,7 @@ const DEFAULT_TIMEOUT = 60000;
 // 这几类要等模型，30 秒是不够的；gen 一次 5~15 秒，kb_build 一个项目就可能十几秒
 const SLOW_TOOLS = new Set([
   "kb_build", "job_match", "resume_generate", "resume_preview",
-  "resume_rerender", "cover_letter_generate", "pitch_generate", "job_add",
+  "resume_rerender", "cover_letter_generate", "pitch_generate", "job_add", "deck_generate",
 ]);
 const SLOW_TIMEOUT = 300000;
 

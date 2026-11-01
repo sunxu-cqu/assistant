@@ -20,6 +20,7 @@ from .llm import get_llm
 from .match.rank import match_job
 from .models import (
     AppStatus,
+    DeckIR,
     Job,
     JobKind,
     JobSource,
@@ -566,6 +567,51 @@ def generate_deck(job_id: str, template_key: str = "baoyan_academic") -> dict[st
             for s in ir.slides
         ],
         "warnings": warnings,
+    }
+
+
+def rerender_deck(app_id: str, template_key: str = "") -> dict[str, Any]:
+    """用磁盘上的 deck.yaml 重新出 PPT（手改结构之后用）。
+
+    和简历的 `rerender` 对称：`deck` 把结构写成可读的 yaml，你改措辞、删页、
+    调顺序，改完跑这个命令重新出片——不重跑组装，也就不需要模型和知识库。
+    """
+    from .compose.deck import list_deck_templates, load_deck_template
+    from .render.pptx_deck import render_deck
+
+    app = db.get_application(app_id)
+    if app is None:
+        return {"ok": False, "stage": "load", "error": f"投递记录不存在：{app_id}"}
+
+    out_dir = OUTPUT_DIR / app.id
+    ir_path = out_dir / "deck.yaml"
+    if not ir_path.exists():
+        return {"ok": False, "stage": "load", "error": f"找不到 {ir_path}，请先跑 deck 生成"}
+
+    try:
+        ir = DeckIR(**(yaml.safe_load(ir_path.read_text(encoding="utf-8")) or {}))
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "stage": "parse", "error": f"deck.yaml 解析失败：{exc}"}
+
+    key = template_key or ir.template or "baoyan_academic"
+    try:
+        template = load_deck_template(key)
+    except FileNotFoundError:
+        keys = "、".join(t["key"] for t in list_deck_templates()) or "（无）"
+        return {
+            "ok": False,
+            "stage": "template",
+            "error": f"PPT 模板不存在：{key}",
+            "hint": f"可用模板：{keys}",
+        }
+
+    pptx_path = render_deck(ir, template, out_dir)
+    return {
+        "ok": True,
+        "application_id": app.id,
+        "pptx_path": str(pptx_path),
+        "slides": len(ir.slides),
+        "outline": [{"type": s.type, "title": s.title} for s in ir.slides],
     }
 
 

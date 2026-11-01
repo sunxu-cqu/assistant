@@ -232,6 +232,8 @@ cp -r workspace/samples/2024-校园二手交易平台 workspace/projects/
 ./.venv/Scripts/python.exe -m resume_assistant.cli gen job_xxx --template academic
 ./.venv/Scripts/python.exe -m resume_assistant.cli letter job_xxx     # 保研套磁信
 ./.venv/Scripts/python.exe -m resume_assistant.cli pitch job_xxx      # 实习开场白（站内信 + 邮件）
+./.venv/Scripts/python.exe -m resume_assistant.cli deck job_xxx       # 保研套磁 PPT（个人陈述）
+./.venv/Scripts/python.exe -m resume_assistant.cli deck-templates     # 看看有哪几套版式
 ```
 
 产物：`data/output/<app_id>/resume.pdf`（另有 `ir.yaml` 和 `resume.typ`，都可手改后重新编译）。
@@ -389,6 +391,8 @@ WorkBuddy 的配置文件是 `~/.workbuddy-ai/mcp.json`。写完后需要在连�
 | `resume_rerender` | 手改 ir.yaml 后重新出 PDF（不调模型） |
 | `cover_letter_generate` | 保研套磁信（Markdown，仅 baoyan 岗位） |
 | `pitch_generate` | 实习开场白（站内信 + 邮件两版，仅 internship 岗位） |
+| `deck_generate` | 保研套磁 PPT（个人陈述，一个项目一页） |
+| `deck_templates` | 套磁 PPT 模板列表 |
 | `template_list` | 模板列表 |
 | `app_list` / `app_detail` / `app_advance` | 投递记录与状态机 |
 | `app_timeline` | 状态流转历史 |
@@ -477,6 +481,42 @@ draft → matched → composed → sent → screening → interview → offer
 - **落款**：只从 `profile.yaml` 取真实姓名、学校、专业、电话、邮箱，不让模型自己编联系方式。
 
 产物是 `data/output/<app_id>/cover_letter.md`，正文通常 400–700 字。检查不通过会自动带反馈重写一次，仍不过则返回警告清单——**信还是会给你，但风险摆在你面前**。
+
+---
+
+## 套磁 PPT
+
+导师回信之后，简历不够用了。线上组会、面试开场、夏令营自述，要的是**一页一件事**的讲法，而不是把简历塞进 4:3 的文本框。
+
+```bash
+./.venv/Scripts/python.exe -m resume_assistant.cli deck job_xxx                 # 学术型
+./.venv/Scripts/python.exe -m resume_assistant.cli deck job_xxx -t baoyan_brief # 精简型
+```
+
+两套模板（`resume_assistant/render/deck_templates/*.yaml`，只描述版式与槽位，不含内容）：
+
+| 模板 | 页数 | 适合 |
+|---|---|---|
+| `baoyan_academic` | 每个项目展开一页 | 随邮件发给导师，讲方法、结果、匹配点 |
+| `baoyan_brief` | 6 页，最多 2 个项目 | 邮件附件速览、线上面试开场自述 |
+
+**正文不经过模型。** 这是它和套磁信最大的区别：项目页由证据里的 `star`（背景 / 动作 / 结果）和 `metrics` 直接拼成，
+所以 PPT 上的每个数字天然过了反幻觉闸门——不是「事后检查有没有编」，而是「根本没有编的机会」。
+`why` 页（为什么选这个方向）需要导师研究方向，没填就整页不出，不拿空话凑页数。
+
+页面顺序：封面 → 个人概况 → 项目（一页一个）→ 为什么 → 研究设想 → 结尾。每页带 `evidence_id` 指回证据，
+`notes` 里写了演讲备注（讲什么、别念稿）。
+
+结构和简历一样可以手改：
+
+```bash
+./.venv/Scripts/python.exe -m resume_assistant.cli deck-rerender app_xxx
+```
+
+`deck` 会把结构写成 `data/output/<app_id>/deck.yaml`，改措辞、删页、调顺序都行；`deck-rerender` 只重新排版，
+不重跑组装，也不需要模型和知识库。产物 `data/output/<app_id>/deck.pptx`（16:9，中文字体走 eastAsia）。
+
+VSCode 插件里在保研岗位卡片上点「套磁 PPT」即可，会先让你选模板，出片后直接打开。
 
 ---
 
@@ -581,19 +621,19 @@ set RESUME_ASSISTANT_MOCK=1
 # fixture 在 tests/fixtures/office/，来源见那里的 README
 ./.venv/Scripts/python.exe tests/office_real.py
 
-# CLI 全命令冒烟（77 项断言：每个子命令的 --help / 只读 / 错误输入 / 写命令正路）
+# CLI 全命令冒烟（89 项断言：每个子命令的 --help / 只读 / 错误输入 / 写命令正路 / PPT 生成与重渲染）
 ./.venv/Scripts/python.exe tests/cli_smoke.py
 
 # MCP 协议握手（initialize / tools/list / tools/call / 错误路径 / stderr 干净度）
 ./.venv/Scripts/python.exe tests/test_mcp.py
 
-# 界面层（页面能开 / 数据能拿 / 动作能执行 / 越界访问被挡 / 前端渲染 53 项）
+# 界面层（页面能开 / 数据能拿 / 动作能执行 / 越界访问被挡 / 前端渲染 62 项）
 ./.venv/Scripts/python.exe tests/web_smoke.py
 
 # VSCode 扩展（30 项：清单 / 激活 / 视图 HTML / 真实 MCP 调用 / 错误路径）
 node tests/vscode_smoke.js
 
-# VSCode 扩展的 webview（36 项：四视图渲染 / 点击→工具名映射 / 路径转义）
+# VSCode 扩展的 webview（46 项：四视图渲染 / 点击→工具名映射 / 路径转义 / 套磁 PPT）
 node tests/vscode_render.js
 
 # 模板排版预览（假数据渲染两套模板，产出 data/output/_preview/*.pdf）
@@ -663,19 +703,20 @@ node tests/vscode_render.js
 | 在读学生（「2023.09 ~ 至今」）不被误判届别不符 | 通过 |
 | 套磁信（称呼不叠字、不虚构附件、不编造论文） | 通过 |
 | 套磁信没填导师姓名时提示补 mentor，主题不出现空段 | 通过 |
+| 套磁 PPT：一个项目一页、指标全部指回证据、缺素材时整页不出、手改 deck.yaml 后重渲染 | 通过 |
 | 实习开场白（长度上限、可实习时间不许编、空话识别） | 通过 |
 | 开场白缺 internship_available 时提示补档案 | 通过 |
 | 边界：非法 kind / 非法状态名 / 未知模板都返回结构化错误，不抛堆栈 | 通过 |
 | 边界：损坏的 profile.yaml 给出行号，损坏的证据文件被统计并告警 | 通过 |
 | 边界：8 线程并发写备注不丢，并发建档只产生一条 | 通过 |
 | 边界：单文件超 20MB 直接跳过（数据集/录屏读进来只是噪声） | 通过 |
-| MCP stdio 握手 + 23 个工具 | 通过 |
+| MCP stdio 握手 + 27 个工具 | 通过 |
 | 语义召回：装了走融合、没装退回 BM25、编码器抛异常也不影响匹配 | 通过 |
 | OCR：没装时给出启用方法；装了就按页识别（用假引擎验证过整条链路） | 通过 |
 | 本地界面：页面能开、数据能拿、动作能执行、越界访问被挡、8 并发稳定 | 通过 |
 | 前端渲染：不开浏览器跑内联脚本，有告警 / 有截止 / 有 PDF / OCR 开关两种状态都渲染正确 | 通过 |
 | VSCode 扩展：桩掉 vscode 模块，激活 / 视图 HTML / 真实 MCP 调用 / 错误路径 30 项 | 通过 |
-| 扩展 webview：四视图渲染 + 点击发出去的工具名与参数 + Windows 路径转义 36 项 | 通过 |
+| 扩展 webview：四视图渲染 + 点击发出去的工具名与参数 + Windows 路径转义 + 套磁 PPT 46 项 | 通过 |
 
 真实 API 端到端跑通 5 个岗位（3 实习 + 2 保研），简历全部 0 错误生成，2 封套磁信 0 编造风险。
 另有一组「像真人资料」的 8 个文件夹（多文件项目 / 备份文件夹 / docx 表格 / 6MB 日志 / 25MB csv / 扫描件 / GBK 笔记）跑通全流程：8 条证据，实习 1 页、保研 1 页，均 0 错误。

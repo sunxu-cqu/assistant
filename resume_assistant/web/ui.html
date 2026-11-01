@@ -207,6 +207,8 @@
     border-color:#b7cfe6;background:#fff;box-shadow:0 0 0 3px rgba(31,78,121,.08)
   }
   .field textarea{min-height:120px;resize:vertical;line-height:1.6}
+  /* 弹窗里的说明：讲清这一步做了什么、别改哪里，比正文小一档 */
+  .hint{font-size:12px;line-height:1.65;color:var(--muted);margin:2px 0 12px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
   @media (max-width:720px){.grid2{grid-template-columns:1fr}}
 
@@ -505,6 +507,7 @@ function viewJobs(d) {
         <button class="btn btn-ghost btn-tiny" onclick="doMatch(${arg(j.id)})">匹配</button>
         <button class="btn btn-ghost btn-tiny" onclick="doGen(${arg(j.id)})">生成简历</button>
         <button class="btn btn-ghost btn-tiny" onclick="doLetter(${arg(j.id)}, ${arg(j.kind)})">${j.kind === "baoyan" ? "套磁信" : "开场白"}</button>
+        ${j.kind === "baoyan" ? `<button class="btn btn-ghost btn-tiny" onclick="openDeckModal(${arg(j.id)})">套磁 PPT</button>` : ""}
       </div>
     </div>`;
   }).join("") || `<div class="empty" style="margin:16px">岗位池是空的。点右上角「录入岗位」，或先跑一次 kb build。</div>`;
@@ -627,6 +630,50 @@ async function doLetter(jobId, kind) {
     openTextModal(kind === "baoyan" ? "套磁信" : "开场白", text, r.letter?.warnings || r.pitch?.warnings || []);
     return r;
   });
+}
+
+/* ------------------------------------------------ 保研套磁 PPT */
+function openDeckModal(jobId) {
+  openModal("生成套磁 PPT", `
+    <div class="field"><label>模板</label>
+      <select id="deckTpl">
+        <option value="baoyan_academic">学术型 · 一个项目一页，讲方法、结果、匹配点</option>
+        <option value="baoyan_brief">精简型 · 6 页讲完，适合邮件附件或面试开场</option>
+      </select></div>
+    <div class="hint">正文不经过模型：项目页由证据里的「背景 / 动作 / 结果」和指标拼成，
+      每个数字都指得回出处。要改措辞就改 deck.yaml 后重新渲染，别动事实。</div>
+    <button class="btn btn-primary" onclick="submitDeck(${arg(jobId)})">生成</button>`);
+}
+
+async function submitDeck(jobId) {
+  const tpl = $("#deckTpl").value;
+  closeModal();
+  await act(async () => {
+    const r = await api(`/api/jobs/${encodeURIComponent(jobId)}/deck`, { template: tpl });
+    if (!r.pptx_path) {
+      toast(r.error || "PPT 没生成出来", "err");
+      return r;
+    }
+    toast(`已生成 ${r.slides || (r.outline || []).length} 页`, "ok");
+    openDeckResult(r);
+    return r;
+  });
+}
+
+function openDeckResult(r) {
+  const n = r.slides || (r.outline || []).length;
+  const warns = (r.warnings || []).map(w => `<div class="alert warn">${esc(w)}</div>`).join("");
+  const rows = (r.outline || []).map((s, i) => `<div class="row">
+      <div><div class="t">${i + 1}. ${esc(s.title)}</div>
+      ${s.evidence_id ? `<div class="s mono">${esc(s.evidence_id)}</div>` : ""}</div>
+    </div>`).join("");
+  // 网页点不了本地路径，走 /api/file 让浏览器下载（它只服务 data/output 下的文件）
+  const href = `/api/file?path=${encodeURIComponent(r.pptx_path)}`;
+  openModal(`套磁 PPT · 共 ${n} 页`, `
+    ${warns}
+    <div class="rows">${rows}</div>
+    <div class="mt"><a class="btn btn-primary" href="${esc(href)}" download>下载 PPT</a></div>
+    <div class="s muted" style="margin-top:10px">${esc(r.pptx_path)}</div>`);
 }
 
 /* ------------------------------------------------ 弹层 */

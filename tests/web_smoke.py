@@ -174,6 +174,37 @@ def main() -> int:
     tl = json.loads(body)
     check("时间线可读", tl.get("ok") is True and len(tl.get("events", [])) >= 3, str(tl)[:160])
 
+    print("\n[3b] 保研套磁 PPT")
+    check("前端有套磁 PPT 入口", "openDeckModal" in html, "ui.html 里找不到 openDeckModal")
+
+    code, res = post(
+        "/api/jobs",
+        {
+            "kind": "baoyan",
+            "org": "某课题组",
+            "mentor": "张老师",
+            "title": "推荐系统方向学硕",
+            "raw_text": "课题组招收推免生，方向推荐系统。要求熟悉 Python、PyTorch，有推荐系统项目经验。",
+        },
+    )
+    check("录保研岗成功", res.get("ok") is True, str(res)[:160])
+    bjob = res.get("job", {}).get("id", "")
+
+    code, res = post(f"/api/jobs/{urllib.parse.quote(bjob)}/deck", {"template": "baoyan_brief"})
+    check("生成 PPT 成功", res.get("ok") is True, str(res)[:200])
+    pptx = res.get("pptx_path") or ""
+    check("产出 pptx 路径", bool(pptx) and Path(pptx).exists(), pptx)
+    check("页数大于 0", (res.get("slides") or 0) > 0, str(res.get("slides")))
+    check("第一页是封面", (res.get("outline") or [{}])[0].get("type") == "cover",
+          str(res.get("outline"))[:160])
+
+    code, body, ctype = get("/api/file?path=" + urllib.parse.quote(pptx))
+    check("PPT 可下载", code == 200, str(code))
+    check("下载内容非空", len(body) > 5000, str(len(body)))
+
+    code, res = post(f"/api/jobs/{urllib.parse.quote(bjob)}/deck", {"template": "nope"})
+    check("坏模板返回结构化错误", res.get("ok") is False and "模板" in res.get("error", ""), str(res)[:160])
+
     print("\n[4] 知识库接口")
     code, res = post("/api/kb/build", {"force": True})
     check("kb build 成功", res.get("ok") is not False, str(res)[:160])

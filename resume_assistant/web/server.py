@@ -71,6 +71,9 @@ ROUTES: list[Route] = [
     )),
     ("POST", r"^/api/jobs/(?P<id>[^/]+)/letter$", lambda req, m: pipeline.generate_letter(m["id"])),
     ("POST", r"^/api/jobs/(?P<id>[^/]+)/pitch$", lambda req, m: pipeline.generate_pitch(m["id"])),
+    ("POST", r"^/api/jobs/(?P<id>[^/]+)/deck$", lambda req, m: pipeline.generate_deck(
+        m["id"], template_key=req.body.get("template") or "baoyan_academic"
+    )),
     ("POST", r"^/api/apps/(?P<id>[^/]+)/advance$", lambda req, m: pipeline.advance(
         m["id"], req.body.get("to_status", ""), req.body.get("note", "")
     )),

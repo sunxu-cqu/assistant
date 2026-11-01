@@ -132,6 +132,7 @@ BAD_INPUT = [
     (["kb", "fix", "ev_不存在", "-k", "course"], "证据不存在"),
     (["kb", "fix", "ev_cli_1", "-w", "99"], "weight 越界"),
     (["kb", "fix", "ev_cli_1", "-k", "根本不存在的类型"], "非法 kind"),
+    (["deck", "job_不存在"], "岗位不存在"),
 ]
 
 HELP = [
@@ -140,6 +141,7 @@ HELP = [
     ["job"], ["job", "add"], ["job", "list"],
     ["app"], ["app", "list"], ["app", "advance"], ["app", "note"], ["app", "show"],
     ["match"], ["gen"], ["rerender"], ["templates"], ["letter"], ["pitch"], ["board"],
+    ["deck"], ["deck-templates"], ["deck-rerender"],
 ]
 
 
@@ -242,6 +244,42 @@ def main() -> int:
     except json.JSONDecodeError:
         ok_board = False
     check("看板统计到这条投递", ok_board, out[-300:])
+
+    print("\n[5b] 保研套磁 PPT：生成 → 手改 → 重渲染")
+    code, out = run(["deck-templates"], env)
+    check("deck-templates 列出两套", code == 0 and "baoyan_academic" in out and "baoyan_brief" in out,
+          f"exit={code} {out[-200:]}")
+
+    code, out = run(
+        ["job", "add", "-k", "baoyan", "--org", "某课题组", "--mentor", "张老师",
+         "--title", "推荐系统方向学硕",
+         "--text", "课题组招收推免生，方向推荐系统。要求熟悉 Python、PyTorch，有推荐系统项目经验。"],
+        env,
+    )
+    m = re.search(r'"(job_[^"]+)"', out)
+    by_job = m.group(1) if m else ""
+    check("录保研岗成功", code == 0 and bool(by_job), f"exit={code} {out[-300:]}")
+
+    code, out = run(["deck", by_job], env)
+    check("deck 产出 pptx", code == 0 and ".pptx" in out, f"exit={code} {out[-400:]}")
+    m = re.search(r"(app_[^\s\\/]+)[\\/]deck\.pptx", out)
+    deck_app = m.group(1) if m else ""
+    check("deck 打印出 app_id", bool(deck_app), out[-300:])
+
+    code, out = run(["deck", by_job, "-t", "nope"], env)
+    check("坏模板被拒且给出可用列表", code != 0 and "baoyan_academic" in out, f"exit={code} {out[-200:]}")
+
+    if deck_app:
+        ir = SANDBOX / "data" / "output" / deck_app / "deck.yaml"
+        check("deck.yaml 落在输出目录", ir.exists(), str(ir))
+        if ir.exists():
+            raw = ir.read_text(encoding="utf-8").replace("title: ", "title: 手改-", 1)
+            ir.write_text(raw, encoding="utf-8")
+            code, out = run(["deck-rerender", deck_app], env)
+            check("deck-rerender 跑通", code == 0 and ".pptx" in out, f"exit={code} {out[-300:]}")
+
+    code, out = run(["deck-rerender", "app_不存在"], env)
+    check("deck-rerender 报投递不存在", code != 0 and "不存在" in out, f"exit={code} {out[-200:]}")
 
     print("\n[6] 环境坏了也只说人话")
     pf = SANDBOX / "data" / "profile.yaml"

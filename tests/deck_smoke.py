@@ -293,6 +293,22 @@ def main() -> int:
     titles = [s["title"] for s in res7["outline"] if s["type"] == "project"]
     check("同一项目只占一页", len(titles) == len(set(titles)), str(titles))
 
+    print("\n[9] 手改 deck.yaml 后重渲染")
+    res8 = pipeline.generate_deck("job_by")
+    ir_path = Path(res8["ir_path"])
+    raw = yaml.safe_load(ir_path.read_text(encoding="utf-8"))
+    raw["slides"][0]["title"] = "张三丰"  # 故意改个显眼的字，方便断言
+    ir_path.write_text(yaml.safe_dump(raw, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+    rr = pipeline.rerender_deck(res8["application_id"])
+    check("重渲染成功", rr.get("ok") is True, str(rr)[:200])
+    prs2 = Presentation(str(rr["pptx_path"]))
+    check("改后的字进了新片", "张三丰" in slide_text(prs2.slides[0]), slide_text(prs2.slides[0])[:120])
+    check("页数没变", len(prs2.slides) == res8["slides"], f"{len(prs2.slides)} vs {res8['slides']}")
+
+    rr2 = pipeline.rerender_deck("app_不存在")
+    check("投递记录不存在时返回失败", rr2.get("ok") is False, str(rr2)[:120])
+
     print(f"\n{'=' * 46}")
     print(f"通过 {len(PASS)} 项，失败 {len(FAIL)} 项")
     if FAIL:

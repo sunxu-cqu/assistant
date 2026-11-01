@@ -328,6 +328,17 @@ def deck_templates() -> dict:
     return _safe(lambda: {"ok": True, "items": pipeline.all_deck_templates()})
 
 
+@mcp.tool()
+def deck_rerender(app_id: str, template: str = "") -> dict:
+    """手改 deck.yaml 后重新出 PPT，不重跑组装、不调模型。
+
+    deck_generate 会把结构写成 data/output/<app_id>/deck.yaml，里面的措辞、页序、
+    指标都可以改。改完用这个命令重新出片——和简历的 resume_rerender 是同一个思路。
+    template 留空则沿用 deck.yaml 里记录的模板。
+    """
+    return _safe(pipeline.rerender_deck, app_id=app_id, template_key=template)
+
+
 # ------------------------------------------------------------------ 状态机
 
 @mcp.tool()

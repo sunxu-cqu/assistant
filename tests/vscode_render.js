@@ -89,6 +89,16 @@ function fixture() {
 
 /* ------------------------------------------------------------------ 实例 */
 
+// deck_generate 的回包：有 pptx_path 才会走到「打开文件」，所以这里必须给全
+const DECK_REPLY = {
+  ok: true,
+  slides: 8,
+  pptx_path: "C:\\简历助手\\data\\output\\app_2\\deck.pptx",
+  ir_path: "C:\\简历助手\\data\\output\\app_2\\deck.yaml",
+  outline: [{ title: "张三", type: "cover" }, { title: "个人概况", type: "profile" }],
+  warnings: ["why 页没有可用素材，已跳过"],
+};
+
 function makeEl(id) {
   return {
     id, _html: "", textContent: "", value: "", style: {},
@@ -119,7 +129,9 @@ function makeInstance(mode, data) {
       // 真实扩展一定会回包；不回包的话 act() 的 busy 永远不会释放
       if (m.type === "call") {
         setTimeout(() => {
-          const payload = m.tool === "ui_overview" ? data : { ok: true };
+          let payload = { ok: true };
+          if (m.tool === "ui_overview") payload = data;
+          else if (m.tool === "deck_generate") payload = DECK_REPLY;
           if (onMessage) onMessage({ data: { type: "result", id: m.id, ok: true, data: payload } });
         }, 5);
       }
@@ -130,7 +142,7 @@ function makeInstance(mode, data) {
   const win = { addEventListener(type, fn) { if (type === "message") onMessage = fn; } };
   const factory = new Function(
     "document", "window", "acquireVsCodeApi", "setTimeout",
-    SRC + "\n;return {refresh, render, state, viewBoard, viewJobs, viewKb, viewSystem, doGen, doMatch, doLetter, buildKb, setView};"
+    SRC + "\n;return {refresh, render, state, viewBoard, viewJobs, viewKb, viewSystem, doGen, doMatch, doLetter, buildKb, openDeckModal, submitDeck, setView};"
   );
   const fns = factory(doc, win, () => api, (fn) => fn());
   return { fns, doc, nodes, sent };
@@ -171,7 +183,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check("岗位池两行", (jobs.match(/class="row"/g) || []).length === 2);
   check("保研行显示套磁信", jobs.includes("套磁信"));
   check("实习行显示开场白", jobs.includes("开场白"));
-
   const kb = fns.viewKb(data);
   check("知识库统计", kb.includes(">11<") && kb.includes(">24<"));
   check("坏文件上屏", kb.includes("旧版简历.doc"));
@@ -239,6 +250,36 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const m = inline.match(/openPdf\((&quot;|")(.*?)(&quot;|")\)/);
   check("PDF 路径进了 onclick", !!m);
   check("反斜杠没被当成转义符", !m || !/&#10;|&#13;/.test(m[2]), m ? m[2] : "");
+
+  console.log("\n[7] 套磁 PPT");
+  // 入口只该给保研岗位：实习岗生成个人陈述没有意义
+  const jobBtns = (fns.viewJobs(data).match(/套磁 PPT/g) || []).length;
+  check("岗位池里只有保研行有套磁 PPT", jobBtns === 1, `实际 ${jobBtns}`);
+  const boardBtns = (fns.viewBoard(data).match(/套磁 PPT/g) || []).length;
+  check("看板上保研卡片也有套磁 PPT", boardBtns === 1, `实际 ${boardBtns}`);
+
+  fns.openDeckModal("job_2");
+  const deckModal = panel.nodes["#modalBody"].innerHTML;
+  check("弹窗给出两个模板",
+    deckModal.includes("baoyan_academic") && deckModal.includes("baoyan_brief"));
+  check("弹窗说清改哪里不改哪里", deckModal.includes("deck.yaml"));
+
+  // 弹窗是字符串塞进 innerHTML 的，桩里没有真实 DOM，先把这个 select 造出来再赋值
+  panel.doc.querySelector("#deckTpl").value = "baoyan_brief";
+  const m5 = calls().length;
+  await fns.submitDeck("job_2");
+  await sleep(30);
+  const deck = calls().slice(m5).filter((x) => x.tool === "deck_generate")[0];
+  check("生成 PPT → deck_generate", !!deck, JSON.stringify(calls().slice(m5).map((x) => x.tool)));
+  check("带上 job_id", deck && deck.args.job_id === "job_2", JSON.stringify(deck && deck.args));
+  check("模板取自下拉框", deck && deck.args.template === "baoyan_brief",
+    JSON.stringify(deck && deck.args));
+
+  const opened = panel.sent.filter((x) => x.type === "openFile").pop();
+  check("生成后打开 pptx", !!opened && /\.pptx$/.test(opened.path), opened ? opened.path : "没发 openFile");
+  const warnHtml = panel.nodes["#modalBody"].innerHTML;
+  check("有提醒就弹出来", warnHtml.includes("why 页"), warnHtml.slice(0, 80));
+  check("提醒里给结构文件路径", warnHtml.includes("deck.yaml"));
 
   console.log("\n" + "=".repeat(46));
   console.log(`通过 ${PASS} 项，失败 ${FAILS.length} 项`);

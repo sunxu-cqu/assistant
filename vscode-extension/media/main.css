@@ -312,6 +312,8 @@ body[data-mode="panel"] #app { height: 100%; display: flex; flex-direction: colu
 .field textarea { min-height: 110px; resize: vertical; line-height: 1.55; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
 @media (max-width: 620px) { .grid2 { grid-template-columns: 1fr; } }
+/* 弹窗里的说明文字：讲清楚这一步做了什么、别改哪里，字号比正文小一档 */
+.hint { font-size: 11.5px; line-height: 1.6; color: var(--muted); margin: 2px 0 12px; }
 
 /* ---------------------------------------------------------------- 提示 */
 

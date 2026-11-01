@@ -410,7 +410,20 @@ def deck_cmd(
         for w in res["warnings"]:
             typer.echo(f"  ! {w}")
     typer.echo(f"\n已生成：{res['pptx_path']}")
-    typer.echo(f"结构文件：{res['ir_path']}（改完可以重新渲染）")
+    typer.echo(f"结构文件：{res['ir_path']}（改完跑 deck-rerender 重新出片）")
+
+
+@app.command("deck-rerender")
+def deck_rerender_cmd(
+    app_id: str,
+    template: str = typer.Option("", "--template", "-t", help="换一套版式（留空沿用原模板）"),
+) -> None:
+    """手改 deck.yaml 后重新出 PPT（不调模型）。"""
+    res = pipeline.rerender_deck(app_id, template_key=template)
+    if not res.get("ok"):
+        _out(res)
+        raise typer.Exit(1)
+    typer.echo(f"共 {res['slides']} 页，已重新生成：{res['pptx_path']}")
 
 
 @app.command("deck-templates")

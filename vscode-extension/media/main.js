@@ -262,6 +262,7 @@ function cardHtml(it) {
     <div class="next">下一步 · <b>${esc(it.next || "—")}</b></div>
     <div class="card-actions">
       ${canGen ? `<button class="btn btn-ghost btn-tiny" onclick="doGen(${arg(it.job_id)})">生成简历</button>` : ""}
+      ${it.kind === "baoyan" ? `<button class="btn btn-ghost btn-tiny" onclick="openDeckModal(${arg(it.job_id)})">套磁 PPT</button>` : ""}
       ${canAdvance ? `<button class="btn btn-ghost btn-tiny" onclick="openAdvance(${arg(it.app_id)})">推进状态</button>` : ""}
       <button class="btn btn-ghost btn-tiny" onclick="openNote(${arg(it.app_id)})">记一笔</button>
       ${it.pdf ? `<button class="btn btn-ghost btn-tiny" onclick="openPdf(${arg(it.pdf)})">打开 PDF</button>` : ""}
@@ -282,6 +283,7 @@ function viewJobs(d) {
         <button class="btn btn-ghost btn-tiny" onclick="doMatch(${arg(j.id)})">匹配</button>
         <button class="btn btn-ghost btn-tiny" onclick="doGen(${arg(j.id)})">生成简历</button>
         <button class="btn btn-ghost btn-tiny" onclick="doLetter(${arg(j.id)}, ${arg(j.kind)})">${j.kind === "baoyan" ? "套磁信" : "开场白"}</button>
+        ${j.kind === "baoyan" ? `<button class="btn btn-ghost btn-tiny" onclick="openDeckModal(${arg(j.id)})">套磁 PPT</button>` : ""}
       </div>
     </div>`).join("")
     || `<div class="empty" style="margin:14px">岗位池是空的。点右上角「录入岗位」，或先跑一次知识库抽取。</div>`;
@@ -423,6 +425,42 @@ async function doLetter(jobId, kind) {
 function openPdf(path) {
   vscode.postMessage({ type: "openFile", path });
   toast("已用系统阅读器打开", "ok");
+}
+
+/* ---------------------------------------------------------------- 保研套磁 PPT */
+
+function openDeckModal(jobId) {
+  openModal("生成套磁 PPT", `
+    <div class="field"><label>模板</label>
+      <select id="deckTpl">
+        <option value="baoyan_academic">学术型 · 一个项目一页，讲方法、结果、匹配点</option>
+        <option value="baoyan_brief">精简型 · 6 页讲完，适合邮件附件或面试开场</option>
+      </select></div>
+    <div class="hint">正文不经过模型：项目页由证据里的「背景 / 动作 / 结果」和指标拼成，
+      每个数字都指得回出处。要改措辞就改 deck.yaml 后重新渲染，别动事实。</div>
+    <button class="btn btn-primary" onclick="submitDeck(${arg(jobId)})">生成</button>`);
+}
+
+async function submitDeck(jobId) {
+  const tpl = $("#deckTpl").value;
+  closeModal();
+  await act(async () => {
+    const r = await rpc("deck_generate", { job_id: jobId, template: tpl });
+    if (r.ok === false || !r.pptx_path) {
+      toast(r.error || "PPT 没生成出来", "err");
+      return r;
+    }
+    const n = r.slides || (r.outline || []).length;
+    toast(`已生成 ${n} 页`, "ok");
+    vscode.postMessage({ type: "openFile", path: r.pptx_path });
+    const warns = r.warnings || [];
+    if (warns.length) {
+      openModal("这套 PPT 有几处要你看一眼",
+        warns.map((w) => `<div class="alert warn">${esc(w)}</div>`).join("")
+        + `<div class="hint">结构文件：${esc(r.ir_path || "")}</div>`);
+    }
+    return r;
+  });
 }
 
 function openBoard() {
