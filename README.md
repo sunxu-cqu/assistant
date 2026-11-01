@@ -540,6 +540,9 @@ draft → matched → composed → sent → screening → interview → offer
 | 抓取能力弱 | JS 渲染页取不到正文，会引导改手动粘贴 | 视需要接 Playwright |
 | 界面 | 有 VSCode 扩展（活动栏 + 四栏看板）和一个本地网页兜底；不是 JetBrains 插件 | 需要的话再包一层 |
 | 单语言 | 只支持中文 | — |
+| 真实 Office 文件未验证 | `docx` / `pptx` / `xlsx` 只用 mock 生成的文件测过；文本框、合并单元格、PPT 备注、页眉页脚都可能读漏 | 见 [ROADMAP](ROADMAP.md) 第一轮 |
+
+后续计划（真实 Office 文件、模板库、批量投递）在 [ROADMAP.md](ROADMAP.md)。
 
 ---
 
