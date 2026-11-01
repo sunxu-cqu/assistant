@@ -54,6 +54,10 @@ MAX_CODE_CHARS_PER_FOLDER = 6000
 MAX_DOC_CHARS_PER_FOLDER = 10000
 MAX_PDF_PAGES = 40
 MAX_SHEET_ROWS = 300
+# openpyxl 的只读模式（ReadOnlyWorksheet）没有 merged_cells 属性，
+# 合并区域里的标签会变成 None 丢掉（「姓名」在合并格左上角，值在右边那格）。
+# 所以小文件全量加载拿合并信息，超过这个体积才退回流式读取。
+MAX_INMEM_XLSX = 8 * 1024 * 1024
 MAX_FILES_PER_FOLDER = 80
 # 单个文件最多读这么多字。项目文件夹里混进训练日志、导出的 csv 很常见，
 # 一个 6MB 的 log 就能把整个项目的字符预算吃光，真正有内容的笔记反而被截断掉
@@ -143,9 +147,59 @@ def _read_pdf(path: Path) -> tuple[str, str, str]:
     return text, "", ""
 
 
+def _docx_heading_mark(para, text: str) -> str:
+    """判断一段是不是小标题，是就加 `##` 前缀。
+
+    真实简历里几乎没人用 Word 的标题样式——实测三份简历，96 个单元格全是 Normal。
+    结构是靠**加粗**表达的（「技能、特长或爱好」「实习经历」整段加粗）。
+    所以先看样式，再退回看加粗；长度上限避免把整段加粗的正文当成标题。
+    """
+    style = getattr(getattr(para, "style", None), "name", "") or ""
+    if style in ("Title", "Heading 1"):
+        return f"## {text}"
+    if style.startswith("Heading"):
+        return f"### {text}"
+    runs = [r for r in para.runs if r.text.strip()]
+    if runs and len(text) <= 30 and all(r.bold for r in runs):
+        return f"## {text}"
+    return text
+
+
+def _xml_run_bold(r_el, qn) -> bool:
+    """`w:rPr/w:b` 存在且没被显式关掉，就算加粗。"""
+    rpr = r_el.find(qn("w:rPr"))
+    if rpr is None:
+        return False
+    b = rpr.find(qn("w:b"))
+    if b is None:
+        return False
+    return b.get(qn("w:val")) not in ("0", "false", "off")
+
+
+def _xml_para(para_el, qn) -> tuple[str, bool]:
+    """从一个 `w:p` 元素里取纯文本 + 是否整段加粗。
+
+    文本框里的段落拿不到 python-docx 的 Paragraph 对象（它们不在 body 直属位置），
+    只能直接读 XML。
+    """
+    texts: list[str] = []
+    bolds: list[bool] = []
+    for r in para_el.findall(qn("w:r")):
+        text = "".join(t.text or "" for t in r.findall(qn("w:t")))
+        if not text.strip():
+            continue
+        texts.append(text)
+        bolds.append(_xml_run_bold(r, qn))
+    joined = "".join(texts).strip()
+    return joined, bool(texts) and all(bolds)
+
+
 def _read_docx(path: Path) -> tuple[str, str]:
     try:
         import docx
+        from docx.oxml.ns import qn
+        from docx.table import Table
+        from docx.text.paragraph import Paragraph
     except ImportError:
         return "", "缺少 python-docx，无法读 Word"
     try:
@@ -154,13 +208,90 @@ def _read_docx(path: Path) -> tuple[str, str]:
         if path.suffix.lower() == ".doc":
             return "", "老版 .doc 打不开，请用 Word 另存为 .docx 后重试"
         return "", "Word 文件损坏或格式异常"
-    parts = [p.text for p in doc.paragraphs if p.text.strip()]
-    for table in doc.tables:
-        for row in table.rows:
-            cells = [c.text.strip() for c in row.cells if c.text.strip()]
-            if cells:
-                parts.append(" | ".join(cells))
-    return "\n".join(parts), ""
+
+    lines: list[str] = []
+    seen_boxes: set[str] = set()
+
+    def emit_box(para_el) -> None:
+        """把这一段落里嵌的文本框内容就地吐出来。
+
+        不能等全文读完再统一追加——那样所有文本框都会堆到末尾，
+        「姓名：小豆」和「教育背景」混成一团，模型分不清哪段属于哪。
+
+        浮动文本框的 XML 顺序本来就不等于视觉顺序（每个框是独立定位的），
+        所以标题标记要跟着走：短句 + 整段加粗就当小标题，帮模型把标签和内容对上。
+        """
+        for box in para_el.iter(qn("w:txbxContent")):
+            for p in box.iter(qn("w:p")):
+                text, bold = _xml_para(p, qn)
+                if not text or text in seen_boxes:
+                    continue
+                seen_boxes.add(text)
+                if bold and len(text) <= 30:
+                    text = f"## {text}"
+                lines.append(text)
+
+    def walk(el) -> None:
+        """按文档顺序处理一个元素。
+
+        `w:sdt`（内容控件）和 `w:customXml` 会把段落包在子容器里，
+        只遍历 body 直属子元素的话，这些段落会被整段跳过——带下拉框/日期选择器的
+        Word 模板很常见这种结构。
+        """
+        for child in el.iterchildren():
+            tag = child.tag
+            if tag == qn("w:p"):
+                para = Paragraph(child, doc)
+                text = para.text.strip()
+                if text:
+                    lines.append(_docx_heading_mark(para, text))
+                emit_box(child)
+            elif tag == qn("w:tbl"):
+                table = Table(child, doc)
+                for row in table.rows:
+                    # 水平合并的格子在 row.cells 里会重复返回同一个 _tc，
+                    # 输出成「技能、特长或爱好 | 技能、特长或爱好 | ...」连着六遍。
+                    seen_cells: set = set()
+                    cells: list[str] = []
+                    for cell in row.cells:
+                        if cell._tc in seen_cells:
+                            continue
+                        seen_cells.add(cell._tc)
+                        value = cell.text.strip()
+                        if value:
+                            cells.append(value)
+                    if cells:
+                        lines.append(" | ".join(cells))
+            elif tag in (qn("w:sdt"), qn("w:customXml")):
+                walk(child)
+
+    walk(doc.element.body)
+
+    for section in doc.sections:
+        for part, label in ((section.header, "页眉"), (section.footer, "页脚")):
+            try:
+                text = " ".join(p.text.strip() for p in part.paragraphs if p.text.strip())
+            except Exception:  # noqa: BLE001
+                continue
+            if text:
+                lines.append(f"[{label}] {text}")
+
+    return "\n".join(lines), ""
+
+
+def _iter_shapes(shapes):
+    """递归展开组合形状。
+
+    组合（GROUP）里的文字在顶层 `slide.shapes` 里根本看不到——`has_text_frame`
+    对 GroupShape 是 False。实测一份答辩 PPT 的目录页（项目简介/系统框图/算法设计…）
+    全部藏在一个组合里，一条都没读到。
+    """
+    for shape in shapes:
+        children = getattr(shape, "shapes", None)
+        if children is not None:
+            yield from _iter_shapes(children)
+        else:
+            yield shape
 
 
 def _read_pptx(path: Path) -> tuple[str, str]:
@@ -175,7 +306,7 @@ def _read_pptx(path: Path) -> tuple[str, str]:
     out: list[str] = []
     for i, slide in enumerate(prs.slides, 1):
         texts: list[str] = []
-        for shape in slide.shapes:
+        for shape in _iter_shapes(slide.shapes):
             if getattr(shape, "has_text_frame", False):
                 t = (shape.text_frame.text or "").strip()
                 if t:
@@ -188,6 +319,14 @@ def _read_pptx(path: Path) -> tuple[str, str]:
                             texts.append(" | ".join(cells))
                 except Exception:  # noqa: BLE001
                     pass
+        # 讲稿。答辩 PPT 的备注里常常是完整口述稿，比幻灯片上的短语信息量大得多
+        try:
+            if slide.has_notes_slide:
+                notes = (slide.notes_slide.notes_text_frame.text or "").strip()
+                if notes:
+                    texts.append(f"[备注] {notes}")
+        except Exception:  # noqa: BLE001
+            pass
         if texts:
             out.append(f"[第 {i} 页]\n" + "\n".join(texts))
     if not out:
@@ -195,32 +334,104 @@ def _read_pptx(path: Path) -> tuple[str, str]:
     return "\n".join(out), ""
 
 
-def _read_xlsx(path: Path) -> tuple[str, str]:
+def _cell_text(value) -> str:
+    """单元格值转文本。
+
+    两个坑：
+    1. openpyxl 把整数读成 float，序号列输出成 `1.0 | 2.0 | 3.0`，看着像测量值；
+    2. 公式结果是全精度浮点，`347.37082309553364` 这种 17 位数字会进 raw_numbers，
+       和之前 IDF 值污染数字池是同一个病——闸门于是对任何数字都放行。
+
+    所以整数转回 int，小数保留 6 位有效数字。
+    """
+    if isinstance(value, bool):
+        return "是" if value else "否"
+    if isinstance(value, float):
+        if value.is_integer() and abs(value) < 1e15:
+            return str(int(value))
+        return f"{value:.6g}"
+    return str(value).strip()
+
+
+def _merged_fill(ws) -> dict[tuple[int, int], object]:
+    """合并区域只有左上角有值，其余是 None。把值铺满，标签才不丢。
+
+    「姓名 | 张三」这种行，如果「姓名」占两列合并，读出来是「姓名 | None | 张三」，
+    标签就没了。铺满之后靠行内连续去重还原成「姓名 | 张三」。
+    """
+    fill: dict[tuple[int, int], object] = {}
     try:
-        import openpyxl
-    except ImportError:
-        return "", "缺少 openpyxl，无法读 Excel"
-    try:
-        wb = openpyxl.load_workbook(str(path), read_only=True, data_only=True)
+        ranges = list(ws.merged_cells.ranges)
     except Exception:  # noqa: BLE001
-        return "", "Excel 文件损坏或格式异常"
+        return fill
+    for rng in ranges:
+        try:
+            anchor = ws.cell(row=rng.min_row, column=rng.min_col).value
+        except Exception:  # noqa: BLE001
+            continue
+        if anchor is None:
+            continue
+        for r in range(rng.min_row, rng.max_row + 1):
+            for c in range(rng.min_col, rng.max_col + 1):
+                if (r, c) != (rng.min_row, rng.min_col):
+                    fill[(r, c)] = anchor
+    return fill
+
+
+def _xlsx_dump(path: Path, *, data_only: bool, stream: bool) -> list[str]:
+    import openpyxl
+
+    wb = openpyxl.load_workbook(str(path), read_only=stream, data_only=data_only)
     out: list[str] = []
     try:
         for ws in wb.worksheets:
+            fill = {} if stream else _merged_fill(ws)
             rows: list[str] = []
-            for n, row in enumerate(ws.iter_rows(values_only=True)):
-                if n >= MAX_SHEET_ROWS:
+            for n, row in enumerate(ws.iter_rows(values_only=True), 1):
+                if n > MAX_SHEET_ROWS:
                     rows.append(f"[超过 {MAX_SHEET_ROWS} 行，已截断]")
                     break
-                cells = [str(c).strip() for c in row if c is not None and str(c).strip()]
+                cells: list[str] = []
+                for col, value in enumerate(row, 1):
+                    if value is None:
+                        value = fill.get((n, col))
+                    if value is None:
+                        continue
+                    text = _cell_text(value)
+                    # 合并单元格铺出来的重复值去掉，别让「姓名」连出六遍
+                    if text and (not cells or cells[-1] != text):
+                        cells.append(text)
                 if cells:
                     rows.append(" | ".join(cells))
             if rows:
                 out.append(f"[工作表 {ws.title}]\n" + "\n".join(rows))
     finally:
         wb.close()
+    return out
+
+
+def _read_xlsx(path: Path) -> tuple[str, str]:
+    try:
+        import openpyxl  # noqa: F401
+    except ImportError:
+        return "", "缺少 openpyxl，无法读 Excel"
+    try:
+        stream = path.stat().st_size > MAX_INMEM_XLSX
+    except OSError:
+        stream = False
+    try:
+        out = _xlsx_dump(path, data_only=True, stream=stream)
+    except Exception:  # noqa: BLE001
+        return "", "Excel 文件损坏或格式异常"
     if not out:
-        return "", "Excel 是空的"
+        # data_only=True 时，从没被 Excel 打开保存过的文件公式单元格全是 None，
+        # 整张表读出来是空的。退回读公式串，至少知道这里有哪些计算。
+        try:
+            out = _xlsx_dump(path, data_only=False, stream=stream)
+        except Exception:  # noqa: BLE001
+            out = []
+        if not out:
+            return "", "Excel 是空的"
     return "\n".join(out), ""
 
 

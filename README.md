@@ -133,6 +133,16 @@ workspace/projects/2024-某项目/
 读进来既吃预算又会把数字池灌满（导致任何编造的数字都能「找到出处」）。
 `kb scan` 会按原因分组告诉你哪些没读，不会一条条刷屏。
 
+**Office 文件按真实结构读**，不是只读段落文字：
+
+| 格式 | 读什么 | 为什么必须这样 |
+|---|---|---|
+| `docx` | 正文、表格、**文本框**、页眉页脚；按加粗识别小标题 | 网上下载的简历模板常把整页内容放进文本框，用 `document.paragraphs` 读出来是 **0 字** |
+| `pptx` | 递归进**组合形状**、读演讲备注 | 目录页、流程图经常整块打包在一个 GROUP 里，顶层看不到 |
+| `xlsx` | 合并单元格铺满、公式结果保留 6 位有效数字 | 合并格只有左上角有值，不铺满「姓名」这类标签会变成 None；17 位浮点进数字池等于让闸门失效 |
+
+实测数据见 [`tests/fixtures/office/README.md`](tests/fixtures/office/README.md)。
+
 `workspace/projects/` 默认是空的。想先看看效果，把示例复制过来试跑（跑通后记得删掉再放自己的，否则示例项目会和你的真实经历一起抢简历上的位置）：
 
 ```bash
@@ -540,7 +550,8 @@ draft → matched → composed → sent → screening → interview → offer
 | 抓取能力弱 | JS 渲染页取不到正文，会引导改手动粘贴 | 视需要接 Playwright |
 | 界面 | 有 VSCode 扩展（活动栏 + 四栏看板）和一个本地网页兜底；不是 JetBrains 插件 | 需要的话再包一层 |
 | 单语言 | 只支持中文 | — |
-| 真实 Office 文件未验证 | `docx` / `pptx` / `xlsx` 只用 mock 生成的文件测过；文本框、合并单元格、PPT 备注、页眉页脚都可能读漏 | 见 [ROADMAP](ROADMAP.md) 第一轮 |
+| 文本框顺序 | 浮动文本框各自定位，XML 顺序不等于眼睛看到的顺序，标题可能排在内容后面（内容不丢） | 按锚点坐标排序收益有限，暂不做 |
+| xlsx 公式 | 从没被 Excel 打开保存过的文件没有公式缓存，只能读到 `=B2*C2` 而非计算结果 | 需要用户用 Excel 打开存一次 |
 
 后续计划（真实 Office 文件、模板库、批量投递）在 [ROADMAP.md](ROADMAP.md)。
 
@@ -556,15 +567,19 @@ draft → matched → composed → sent → screening → interview → offer
 
 ## 自测
 
-六个脚本，只有最后一个消耗 API 额度：
+七个脚本，只有最后三个消耗 API 额度：
 
 ```bash
 # 全链路冒烟（97 项断言：资料接入→知识库→匹配→组稿→校验→渲染→状态机→校对→看板→开场白）
 set RESUME_ASSISTANT_MOCK=1
 ./.venv/Scripts/python.exe tests/smoke.py
 
-# 边界测试（96 项断言：非法输入 / 损坏 YAML / 并发 / 超大文件 / 数字闸门 / 资格校验 / CLI 退出码）
+# 边界测试（106 项断言：非法输入 / 损坏 YAML / 并发 / 超大文件 / 数字闸门 / 资格校验 / CLI 退出码）
 ./.venv/Scripts/python.exe tests/edge_cases.py
+
+# 真实 Office 文件（30 项断言：文本框 / 合并单元格 / 组合形状 / 浮点精度 / 坏文件不崩）
+# fixture 在 tests/fixtures/office/，来源见那里的 README
+./.venv/Scripts/python.exe tests/office_real.py
 
 # CLI 全命令冒烟（77 项断言：每个子命令的 --help / 只读 / 错误输入 / 写命令正路）
 ./.venv/Scripts/python.exe tests/cli_smoke.py
@@ -623,6 +638,12 @@ node tests/vscode_render.js
 | 代码文件读「结构摘要」（注释 / docstring / 定义名 / 依赖），不整篇吞 | 通过 |
 | 数据文件识别：分词结果 / IDF 表 / 词典整份跳过，不污染数字池 | 通过 |
 | 同一项目抽出多条证据时，简历上只占一格（不会连出现四次） | 通过 |
+| docx 文本框：真实简历模板整页内容放在文本框里，能完整读出（0 字 → 921 字） | 通过 |
+| docx 合并单元格：不重复输出同一个标签，还原成「标签 \| 值」 | 通过 |
+| docx 小标题：真实简历全是 Normal 样式，靠加粗识别段落结构 | 通过 |
+| pptx 组合形状：目录页 / 流程图藏在 GROUP 里也能读到 | 通过 |
+| xlsx 精度：17 位浮点收敛到 6 位有效数字，序号列不再输出 `1.0 \| 2.0` | 通过 |
+| 损坏的 docx / pptx / xlsx 不抛堆栈，给明确原因 | 通过 |
 | 真实开源仓库 + 真实招聘 JD 端到端（33 项） | 通过 |
 | PDF 页数上报：实习超 1 页 / 保研超 2 页给提醒 | 通过 |
 | Typst 渲染中文 PDF（两套模板，单页） | 通过 |
