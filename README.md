@@ -122,7 +122,16 @@ workspace/projects/2024-某项目/
 └── 其他资料.docx
 ```
 
-支持格式：`.md .txt .pdf .docx .pptx .xlsx .csv .json .yaml`
+文档格式：`.md .txt .pdf .docx .pptx .xlsx .csv .json .yaml`
+
+**代码也会读，但只读骨架**：`.py .java .js .ts .go .rs .c/.cpp .sql .ipynb` 等文件不整篇吞，
+只提取 docstring、注释、函数/类名和依赖。真实学生项目的 README 常常只有三百字，
+剩下的信息全在注释里（「# 4. BM25 加权 & 双模型训练」这种分节注释，比 README 更能还原你干了什么）。
+函数体一行不读——把两千行实现喂给模型，只会挤掉 README 的位置。
+
+**数据文件会被跳过**：分词结果、IDF 表、词典、三元组导出这类文件动辄几万行，
+读进来既吃预算又会把数字池灌满（导致任何编造的数字都能「找到出处」）。
+`kb scan` 会按原因分组告诉你哪些没读，不会一条条刷屏。
 
 `workspace/projects/` 默认是空的。想先看看效果，把示例复制过来试跑（跑通后记得删掉再放自己的，否则示例项目会和你的真实经历一起抢简历上的位置）：
 
@@ -580,6 +589,11 @@ node tests/vscode_render.js
 
 # 真实 API · 像真人资料一样的 8 个文件夹（一个项目多文件 / 备份文件夹 / docx 表格 / 大日志 / 扫描件）
 ./.venv/Scripts/python.exe tests/e2e_folders.py
+
+# 真实 API · 用 GitHub 上的真实仓库当资料（README 只有几百字、九成内容是代码、
+# 还混着 vendored 的 BERT 源码和数据文件），配 4 份真实招聘 JD 跑全流程
+./.venv/Scripts/python.exe tests/gh_fetch.py    # 先下载 5 个仓库
+./.venv/Scripts/python.exe tests/e2e_opensource.py
 ```
 
 `smoke.py` 与 `e2e_real.py` 都用 `RESUME_ASSISTANT_DATA` / `RESUME_ASSISTANT_WORKSPACE` 指向 `tests/sandbox/`。
@@ -603,6 +617,10 @@ node tests/vscode_render.js
 | 指标单位不重复（value 已带 % 时不再拼成 9%%） | 通过 |
 | 备份文件夹抽出的孪生证据在简历里只出现一次 | 通过 |
 | 单文件字符上限：6MB 训练日志挤不掉项目里的说明文件 | 通过 |
+| 代码文件读「结构摘要」（注释 / docstring / 定义名 / 依赖），不整篇吞 | 通过 |
+| 数据文件识别：分词结果 / IDF 表 / 词典整份跳过，不污染数字池 | 通过 |
+| 同一项目抽出多条证据时，简历上只占一格（不会连出现四次） | 通过 |
+| 真实开源仓库 + 真实招聘 JD 端到端（33 项） | 通过 |
 | PDF 页数上报：实习超 1 页 / 保研超 2 页给提醒 | 通过 |
 | Typst 渲染中文 PDF（两套模板，单页） | 通过 |
 | 字号自适应（页数不变前提下放大，等比推导标题） | 通过 |

@@ -532,8 +532,15 @@ def main() -> int:
     big.mkdir(parents=True)
     (big / "train.log").write_text("epoch 1 loss 0.9\n" * 60_000, encoding="utf-8")
     (big / "说明.md").write_text("把召回率从 0.62 提到 0.78，用双塔模型。", encoding="utf-8")
+    # 正常的长文档仍然走「截断」而不是被误判成数据
+    (big / "长报告.md").write_text("本报告记录了完整的实验过程与结论。" * 1200, encoding="utf-8")
     pf = scan_folder(big)
-    check("单文件超过上限被截断", f"超过 {MAX_CHARS_PER_FILE} 字" in pf.text, str(pf.chars))
+    check(
+        "训练日志被识别为数据文件",
+        any("数据文件" in s["reason"] for s in pf.skipped),
+        str([s["reason"][:30] for s in pf.skipped]),
+    )
+    check("长文档超过单文件上限被截断", f"超过 {MAX_CHARS_PER_FILE} 字" in pf.text, str(pf.chars))
     check("大日志没挤掉真正有用的文件", "0.78" in pf.text, pf.text[-200:])
     shutil.rmtree(big, ignore_errors=True)
 

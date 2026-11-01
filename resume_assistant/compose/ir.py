@@ -139,6 +139,48 @@ def _dedupe_evidence(evs: list[Evidence]) -> list[Evidence]:
     return out
 
 
+def _collapse_same_project(evs: list[Evidence]) -> list[Evidence]:
+    """同一个项目文件夹抽出多条时，简历上只留最能代表它的那条。
+
+    资料够丰富时抽取器会拆成「总述 + 各模块」3~4 条（真实项目里这很常见：
+    一个 Django 系统有用户/图书/资讯/论坛四个模块，一个小目标检测项目有三套改进方法）。
+    这些条目在**检索**阶段各有价值——投 CV 岗看 Soft-NMS，投算法岗看 k-means——
+    但**简历上同一个项目只能占一格**，否则「小目标检测」会连出现四次。
+
+    挑总述的判据是「标题与项目文件夹名的重合度」：文件夹叫「小目标检测优化」，
+    标题「小目标检测优化方法研究」几乎全覆盖，而「小目标 copy-paste 数据增强」
+    只沾了三个字——后者是分述。重合度相同时再看 action 条数与指标数。
+    只用指标数会选错：分述往往只有一个漂亮的数字，反而比总述的指标多。
+    """
+    import re as _re
+    from pathlib import Path as _Path
+
+    def folder_key(e: Evidence) -> str:
+        name = _Path(e.source_dir).name if e.source_dir else ""
+        return _re.sub(r"^\d{4}[-_ ]*", "", name)
+
+    def overlap(e: Evidence) -> float:
+        key = folder_key(e)
+        if not key:
+            return 0.0
+        return len(set(e.title) & set(key)) / len(set(key))
+
+    groups: dict[str, list[Evidence]] = {}
+    for e in evs:
+        groups.setdefault(e.source_dir or e.id, []).append(e)
+    if all(len(v) == 1 for v in groups.values()):
+        return evs
+
+    picked = {
+        max(
+            items,
+            key=lambda e: (round(overlap(e), 2), len(e.star.action), len(e.metrics)),
+        ).id
+        for items in groups.values()
+    }
+    return [e for e in evs if e.id in picked]
+
+
 def _edu_section(profile: Profile, spec_title: str) -> IRSection | None:
     if not profile.education:
         return None
@@ -153,8 +195,8 @@ def _edu_section(profile: Profile, spec_title: str) -> IRSection | None:
         bullets: list[Bullet] = []
         if edu.courses:
             bullets.append(Bullet(text="核心课程：" + "、".join(edu.courses[:8]), evidence_id="profile", metrics=[]))
-        if edu.honors:
-            bullets.append(Bullet(text="在校荣誉：" + "、".join(edu.honors[:4]), evidence_id="profile", metrics=[]))
+        # 荣誉不写在这里：模板里有独立的「荣誉奖项」段（_honors_section），
+        # 两处都写的话，同一句「国家奖学金（2024）」会在简历上出现两次。
         entries.append(IREntry(heading=heading, meta=" | ".join(meta_parts), bullets=bullets))
     return IRSection(type="education", title=spec_title, entries=entries)
 
@@ -337,6 +379,8 @@ def compose(
             ]
             # 备份文件夹抽出来的孪生证据先并掉，否则「项目经历」里同一个项目占两格
             pool = _dedupe_evidence(pool)
+            # 再把「同一项目的总述 + 各模块」折叠成一条
+            pool = _collapse_same_project(pool)
             if spec.include_kinds is not None:
                 filtered = [e for e in pool if e.kind in spec.include_kinds]
                 # experience 语义严格：没有对应类型的经历就整段不出现，

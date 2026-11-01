@@ -350,7 +350,7 @@ def main() -> int:
     check("清理后不再报告", not any(o["folder"] == "早就删掉的项目" for o in pipeline.find_orphan_evidence()["items"]))
 
     print("\n[15] 投递看板与编号唯一性")
-    from datetime import date, datetime
+    from datetime import date, datetime, timedelta
 
     from resume_assistant import board as board_mod
     from resume_assistant.jobs.fetcher import make_job
@@ -398,7 +398,10 @@ def main() -> int:
     )
     check("空备注被拒", pipeline.note_application(a2.id, "   ").get("ok") is False)
 
-    bd = board_mod.collect(today=T, now=datetime(2026, 11, 8, 10, 0, 0))
+    # now 必须相对「跑测试的此刻」算：投递事件时间就是刚才 transition 的时间，
+    # 写死成某个日期的话，随着真实日期推进，天数差会掉到 7 天以下，
+    # 这条断言就会在没有任何代码改动的情况下突然变红（2026-11-01 踩过一次）。
+    bd = board_mod.collect(today=T, now=datetime.now() + timedelta(days=10))
     flat = {it["title"]: it for it in bd["items"]}
     check("看板按状态分四栏", len(bd["columns"]) == 4 and sum(c["count"] for c in bd["columns"]) >= 3,
           str([(c["title"], c["count"]) for c in bd["columns"]]))

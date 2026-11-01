@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -93,10 +94,23 @@ def kb_scan(verbose: bool = typer.Option(False, "--verbose", "-v", help="列出�
 
     skipped = [(r["folder"], s) for r in rep["items"] for s in r["skipped"]]
     if skipped:
-        typer.echo(f"\n读不出来的文件（{len(skipped)} 个）：")
+        # 按原因聚合。真实项目里代码文件占九成，逐个列出来就是几十行
+        # 「不支持的格式 .py」，真正该看的那条（比如扫描件读不出）会被淹掉。
+        groups: dict[str, list[str]] = {}
         for folder, s in skipped:
-            typer.echo(f"  ✗ {folder}/{s['file']}")
-            typer.echo(f"      {s['reason']}")
+            reason = s["reason"]
+            # 把「不支持的格式 .py / .java」这类按扩展名收敛成一组
+            m = re.match(r"不支持的格式 ([.\w-]+)?", reason)
+            key = f"不支持的格式 {m.group(1)}" if m and m.group(1) else reason
+            groups.setdefault(key, []).append(f"{folder}/{s['file']}")
+
+        typer.echo(f"\n没读的文件（{len(skipped)} 个，按原因分组）：")
+        for key, files in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+            sample = "、".join(files[:3])
+            more = f" 等 {len(files)} 个" if len(files) > 3 else ""
+            typer.echo(f"  · {key} —— {len(files)} 个：{sample}{more}")
+        if any("数据文件" in k or "预算" in k for k in groups):
+            typer.echo("  （代码只读注释与结构、数据文件不读，都是为了把字符预算留给真正有内容的文档）")
 
     typer.echo(f"\n共 {rep['folders']} 个文件夹，{rep['total_chars']} 字符；待抽取 {len(rep['need_extract'])} 个。")
     if rep["no_text"]:

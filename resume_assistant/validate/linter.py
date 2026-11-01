@@ -141,7 +141,25 @@ def lint(ir: ResumeIR, evidences: list[Evidence], profile: Profile) -> LintResul
                 if is_para:
                     continue
                 ev = by_id.get(b.evidence_id)
-                excerpt = (ev.raw_excerpt or "").lower() if ev else ""
+                # 判定范围是「这条证据说过的全部内容」，不只是 skill_tags。
+                # 只看 tags 会把自己写进 claim/action 的词也报成编造
+                # （真实资料里「用 IoU 距离改进 k-means」——IoU 就在 action 里，
+                #  但抽取时没进 tags，于是每条简历都刷一遍无意义的提示）。
+                ev_text = ""
+                if ev is not None:
+                    ev_text = " ".join(
+                        [
+                            ev.title,
+                            ev.claim,
+                            ev.star.situation,
+                            ev.star.task,
+                            ev.star.result,
+                            " ".join(ev.star.action),
+                            ev.variants.short,
+                            ev.variants.long,
+                            ev.raw_excerpt or "",
+                        ]
+                    ).lower()
                 for word in TECH_RE.findall(b.text):
                     w = word.lower().strip(".-")
                     if len(w) < 2 or w in IGNORE_WORDS:
@@ -150,8 +168,16 @@ def lint(ir: ResumeIR, evidences: list[Evidence], profile: Profile) -> LintResul
                         continue
                     if any(w in t for t in allowed_tech):
                         continue
-                    # 词确实出现在原始资料里，说明只是没进 tags，不算编造
-                    if excerpt and w in excerpt:
+                    # 词确实出现在证据或原始资料里，说明只是没进 tags，不算编造
+                    if ev_text and w in ev_text:
+                        continue
+                    # 组合写法「BERT+BiLSTM+CRF」：三个部分都有出处就不该报。
+                    # 单独拆 C++ 会得到长度 1 的碎片，被下面的长度判断挡掉，不会误放行。
+                    parts = [p for p in w.split("+") if len(p) >= 2]
+                    if len(parts) > 1 and all(
+                        p in allowed_tech or any(p in t for t in allowed_tech) or (ev_text and p in ev_text)
+                        for p in parts
+                    ):
                         continue
                     res.warnings.append(f"[技术词] {where}：「{word}」不在证据的 skill_tags 中，请确认")
 

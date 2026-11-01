@@ -16,7 +16,12 @@ workspace/projects/
 ```
 
 支持 `.md .txt .pdf .docx .pptx .xlsx .csv .json .yaml`。
-扫描版 PDF、截图、老版 `.doc` 读不到文字，`kb scan` 会逐条告诉你原因。
+
+代码文件（`.py .java .js .ts .go .cpp` 等）也会读，但只读注释、docstring、
+函数名和依赖，不读实现——真实项目的 README 往往很薄，信息都在注释里。
+分词结果、IDF 表这类数据文件会被自动跳过，它们只会挤掉真正有内容的文档。
+
+扫描版 PDF、截图、老版 `.doc` 读不到文字，`kb scan` 会告诉你原因。
 
 **不要**把整个硬盘的资料一股脑塞进来——`kb build` 会把每个文件夹喂给模型抽取，
 一个文件夹一次调用。挑你真要写进简历的 5~15 个项目就够。
