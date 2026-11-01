@@ -390,6 +390,36 @@ def pitch_cmd(job_id: str) -> None:
     typer.echo(f"\n已保存：{res['path']}")
 
 
+@app.command("deck")
+def deck_cmd(
+    job_id: str,
+    template: str = typer.Option("baoyan_academic", "--template", "-t", help="PPT 模板 key"),
+) -> None:
+    """生成保研套磁 PPT（个人陈述，一个项目一页）。"""
+    res = pipeline.generate_deck(job_id, template_key=template)
+    if not res.get("ok"):
+        _out(res)
+        raise typer.Exit(1)
+
+    typer.echo(f"共 {res['slides']} 页：")
+    for i, s in enumerate(res["outline"], 1):
+        src = f"   ← {s['evidence_id']}" if s.get("evidence_id") else ""
+        typer.echo(f"  {i}. {s['title']}{src}")
+    if res["warnings"]:
+        typer.echo("\n提醒：")
+        for w in res["warnings"]:
+            typer.echo(f"  ! {w}")
+    typer.echo(f"\n已生成：{res['pptx_path']}")
+    typer.echo(f"结构文件：{res['ir_path']}（改完可以重新渲染）")
+
+
+@app.command("deck-templates")
+def deck_templates_cmd() -> None:
+    """列出保研 PPT 模板。"""
+    for t in pipeline.all_deck_templates():
+        typer.echo(f"{t['key']:18s} {t['name']}  —  {t['description']}")
+
+
 # ---------------------------------------------------------------- 投递状态机
 
 @app_app.command("list")

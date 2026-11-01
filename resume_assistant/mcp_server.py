@@ -303,6 +303,31 @@ def template_list() -> dict:
     return _safe(lambda: {"ok": True, "items": pipeline.all_templates()})
 
 
+@mcp.tool()
+def deck_generate(job_id: str, template: str = "baoyan_academic") -> dict:
+    """为保研岗位生成套磁用 PPT（个人陈述），写入 data/output/<app_id>/deck.pptx。
+
+    这是「一个项目一页、讲背景/做了什么/结果」的分页版本，不是把简历搬到 PPT 上。
+    和简历共用同一份匹配报告，所以两边讲的是同一批项目。
+
+    内容不经过 LLM：项目页直接由证据的 star（背景/动作/结果）和 metrics 拼成，
+    数字天然过了反幻觉闸门。要润色请改 deck.yaml 后重新渲染，不要动正文的事实。
+
+    template 可选 baoyan_academic（学术型，每项目一页）或 baoyan_brief（精简型，6 页）。
+    """
+    return _safe(pipeline.generate_deck, job_id=job_id, template_key=template)
+
+
+@mcp.tool()
+def deck_templates() -> dict:
+    """列出可用的保研套磁 PPT 模板。
+
+    baoyan_academic 每个项目展开一页，适合随邮件发给导师；
+    baoyan_brief 六页讲完，适合线上面试开场或作为附件速览。
+    """
+    return _safe(lambda: {"ok": True, "items": pipeline.all_deck_templates()})
+
+
 # ------------------------------------------------------------------ 状态机
 
 @mcp.tool()

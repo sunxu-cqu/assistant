@@ -33,6 +33,7 @@ EXPECTED_TOOLS = {
     "job_add", "job_list", "job_match",
     "resume_generate", "resume_preview", "resume_rerender",
     "cover_letter_generate", "pitch_generate", "template_list",
+    "deck_generate", "deck_templates",
     "app_list", "app_detail", "app_advance", "app_timeline", "app_note",
     "app_board",
     "ui_overview",

@@ -498,6 +498,77 @@ def preview_ir(job_id: str, template_key: str = "single_column") -> dict[str, An
     return {"ok": True, "ir": ir.model_dump(mode="json"), "lint": lint(ir, evs, load_profile()).to_dict()}
 
 
+# ---------------------------------------------------------------- 保研 PPT
+
+def generate_deck(job_id: str, template_key: str = "baoyan_academic") -> dict[str, Any]:
+    """为保研岗位生成套磁用 PPT（个人陈述）。
+
+    和简历共用同一份匹配报告：两边选的必须是同一批项目，
+    否则会出现「简历里写项目 A、PPT 里讲项目 B」这种自己都圆不回来的场面。
+    """
+    from .compose.deck import build_deck, list_deck_templates, load_deck_template
+    from .render.pptx_deck import render_deck
+
+    job = db.get_job(job_id)
+    if job is None:
+        return {"ok": False, "stage": "load", "error": f"岗位不存在：{job_id}"}
+
+    profile = load_profile()
+    if not profile.name:
+        return {"ok": False, "stage": "profile", "error": f"请先填写 {PROFILE_PATH}"}
+
+    evs = load_all_evidence()
+    if not evs:
+        return {"ok": False, "stage": "load", "error": "知识库为空，请先构建知识库"}
+
+    try:
+        template = load_deck_template(template_key)
+    except FileNotFoundError:
+        keys = "、".join(t["key"] for t in list_deck_templates()) or "（无）"
+        return {
+            "ok": False,
+            "stage": "template",
+            "error": f"PPT 模板不存在：{template_key}",
+            "hint": f"可用模板：{keys}",
+        }
+
+    report = db.get_match(job_id)
+    if report is None:
+        report = match_job(job, evs, llm=get_llm())
+        db.save_match(report)
+
+    ir = build_deck(profile, job, report, evs, template)
+
+    app = db.find_application_by_job(job_id) or db.create_application(job)
+    out_dir = OUTPUT_DIR / app.id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # 存一份 IR：改配色/加页时不用重新跑一遍组装，也能看出每页来自哪条证据
+    (out_dir / "deck.yaml").write_text(
+        yaml.safe_dump(ir.model_dump(mode="json"), allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    pptx_path = render_deck(ir, template, out_dir)
+
+    warnings: list[str] = []
+    if job.kind != JobKind.BAOYAN:
+        warnings.append(f"这是 {job.kind.value} 类岗位，套磁 PPT 主要用于保研联系导师")
+    if not job.mentor_topics:
+        warnings.append("岗位没填导师研究方向，「为什么选这个方向」那一页会缺内容")
+
+    return {
+        "ok": True,
+        "application_id": app.id,
+        "pptx_path": str(pptx_path),
+        "ir_path": str(out_dir / "deck.yaml"),
+        "slides": len(ir.slides),
+        "outline": [
+            {"type": s.type, "title": s.title, "evidence_id": s.evidence_id}
+            for s in ir.slides
+        ],
+        "warnings": warnings,
+    }
+
+
 # ---------------------------------------------------------------- 套磁信
 
 def generate_letter(job_id: str, max_retry: int = 1) -> dict[str, Any]:
@@ -675,3 +746,9 @@ def generate_pitch(job_id: str, max_retry: int = 1) -> dict[str, Any]:
 
 def all_templates() -> list[dict[str, str]]:
     return list_templates()
+
+
+def all_deck_templates() -> list[dict[str, str]]:
+    from .compose.deck import list_deck_templates
+
+    return list_deck_templates()

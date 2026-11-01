@@ -21,6 +21,9 @@ WORKSPACE = Path(os.environ.get("RESUME_ASSISTANT_WORKSPACE", ROOT / "workspace"
 PROJECTS_DIR = WORKSPACE / "projects"
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "render" / "templates"
+# 保研套磁 PPT 的模板。和简历模板分开：一个是 A4 单页版式，一个是 16:9 分页版式，
+# 塞在同一个目录里会让 list_templates() 把两种模板混在一起返回。
+DECK_TEMPLATE_DIR = Path(__file__).resolve().parent / "render" / "deck_templates"
 
 
 class ConfigError(RuntimeError):

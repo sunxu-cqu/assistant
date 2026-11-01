@@ -218,6 +218,35 @@ class ResumeIR(BaseModel):
     sections: list[IRSection] = Field(default_factory=list)
 
 
+# ------------------------------------------------------------ Deck（保研 PPT）
+
+class DeckSlide(BaseModel):
+    """一页 PPT。
+
+    和简历 IR 的区别：简历是「压缩到一页纸」，PPT 是「一个项目展开讲一页」。
+    所以这里保留了 star 的结构（背景 / 动作 / 结果），而不是压成一条 bullet。
+    """
+
+    type: Literal["cover", "profile", "project", "why", "plan", "end"] = "project"
+    title: str = ""
+    subtitle: str = ""       # 封面：学校 · 专业；项目页：角色 · 组织 · 时间
+    meta: str = ""           # 封面：申请方向；结尾：联系方式
+    footer: str = ""         # 页脚（日期等）
+    bullets: list[str] = Field(default_factory=list)
+    # 指标条：每项是 "0.85|F1" 这种「值|标签」，渲染时画成卡片
+    metrics: list[str] = Field(default_factory=list)
+    notes: str = ""          # 演讲备注，放在 pptx 的 notes 里
+    evidence_id: str = ""    # 溯源：这页来自哪条证据
+
+
+class DeckIR(BaseModel):
+    job_id: str = ""
+    template: str = "baoyan_academic"
+    generated_at: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
+    contact: dict[str, str] = Field(default_factory=dict)
+    slides: list[DeckSlide] = Field(default_factory=list)
+
+
 # ------------------------------------------------------------ Application
 
 class AppStatus(str, Enum):

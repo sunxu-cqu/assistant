@@ -1,0 +1,32 @@
+key: baoyan_academic
+name: 保研套磁·学术型
+description: 每个项目展开一页，讲清方法、结果与匹配点；适合作为个人陈述随邮件发给导师
+page:
+  size: "16:9"
+  accent: "#1f4e79"
+  text: "#1a1a1a"
+  muted: "#666666"
+  light: "#f5f7fa"
+  font: "微软雅黑"
+slides:
+  - type: cover
+    subtitle: 个人陈述
+  - type: profile
+    title: 个人概况
+    max_items: 6
+  # 一个项目一页。学术型给到 3 个，因为联系导师时最想看的就是「你做过什么研究」
+  - type: projects
+    title: 科研与项目经历
+    max_entries: 3
+    bullets_per_entry: 3
+    metrics_per_entry: 3
+  - type: why
+    title: 为什么选择这个方向
+    max_points: 3
+  # 研究设想：资料里没有就整页不出，不编
+  - type: plan
+    title: 研究设想
+    optional: true
+    max_points: 3
+  - type: end
+    title: 谢谢

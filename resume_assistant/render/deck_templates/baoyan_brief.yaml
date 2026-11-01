@@ -1,0 +1,27 @@
+key: baoyan_brief
+name: 保研套磁·精简型
+description: 6 页讲完自己，适合邮件附件或线上面试的开场自述
+page:
+  size: "16:9"
+  accent: "#2e5d4b"
+  text: "#1a1a1a"
+  muted: "#666666"
+  light: "#f4f7f5"
+  font: "微软雅黑"
+slides:
+  - type: cover
+    subtitle: 自我介绍
+  - type: profile
+    title: 我是谁
+    max_items: 5
+  # 精简型只留 2 个项目、每个 2 条：面试开场没人想听你讲第三个项目
+  - type: projects
+    title: 做过什么
+    max_entries: 2
+    bullets_per_entry: 2
+    metrics_per_entry: 2
+  - type: why
+    title: 为什么是这里
+    max_points: 2
+  - type: end
+    title: 谢谢
