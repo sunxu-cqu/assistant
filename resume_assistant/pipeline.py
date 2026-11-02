@@ -794,6 +794,57 @@ def all_templates() -> list[dict[str, str]]:
     return list_templates()
 
 
+def template_preview(template_key: str = "single_column", max_pages: int = 1) -> dict[str, Any]:
+    """用内置示例档案渲染一张模板预览图（PNG + PDF），不读用户资料、不调模型。
+
+    为什么要有这个：`templates` 只给一行文字说明，而「单栏」和「双栏」在文字上
+    几乎没区别——用户没法据此选版式，只能挨个生成一遍看效果，一次几千 token。
+    这里直接出图，看得见再选。
+
+    为什么用示例档案而不是真实资料：还没填资料的人正是最需要先看版式的人；
+    而且预览不能因为「你没写实习」就少画一段，那会让人误判模板长什么样。
+    """
+    from .compose.demo import demo_inputs
+    from .llm import DeepSeek
+    from .render.typst import pdf_to_png
+
+    try:
+        template = load_template(template_key)
+    except FileNotFoundError:
+        keys = "、".join(t["key"] for t in list_templates()) or "（无）"
+        return {
+            "ok": False,
+            "stage": "template",
+            "error": f"模板不存在：{template_key}",
+            "hint": f"可用模板：{keys}",
+        }
+
+    profile, job, report, evs = demo_inputs()
+    # 直接构造 mock 客户端，不走 get_llm()：预览要能在没配 API key 的机器上跑，
+    # 而 get_llm() 会在非 mock 模式下先校验 key、直接抛错。
+    ir = compose(profile, job, report, evs, template, llm=DeepSeek(mock=True))
+
+    out_dir = OUTPUT_DIR / "_templates" / template.key
+    typ_path, pdf_path = render_pdf(ir, template, out_dir)
+    result = lint(ir, evs, profile)
+    pngs = pdf_to_png(pdf_path, out_dir, pages=max_pages) if pdf_path else []
+
+    return {
+        "ok": pdf_path is not None,
+        "template": template.key,
+        "name": template.name,
+        "layout": str((template.page or {}).get("layout", "single")),
+        "png_path": str(pngs[0]) if pngs else "",
+        "png_paths": [str(p) for p in pngs],
+        "pdf_path": str(pdf_path) if pdf_path else "",
+        "typ_path": str(typ_path),
+        "page_count": pdf_pages(pdf_path),
+        "sections": [s.title for s in ir.sections],
+        "lint": result.to_dict(),
+        "hint": None if pdf_path else "PDF 编译失败，见 render_error.txt；预览图因此也没出",
+    }
+
+
 def all_deck_templates() -> list[dict[str, str]]:
     from .compose.deck import list_deck_templates
 

@@ -17,6 +17,9 @@ class SectionSpec:
         self.bullets_per_entry: int = int(raw.get("bullets_per_entry", 3))
         self.variant: str = raw.get("variant", "short")
         self.optional: bool = bool(raw.get("optional", False))
+        # 双栏版式里这一段放哪：full 整幅（通常教育背景）/ left / right。
+        # 单栏模板不写这个字段，写了也不影响。
+        self.column: str = raw.get("column", "")
         # 该 section 接受的证据类型；None 表示不过滤
         kinds = raw.get("include_kinds")
         self.include_kinds: set[str] | None = set(kinds) if kinds else None

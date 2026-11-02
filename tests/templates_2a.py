@@ -149,7 +149,10 @@ def main() -> int:
 
     print("\n[1] 模板清单")
     keys = {t["key"] for t in list_templates()}
-    check("四套模板都在", keys == {"single_column", "academic", "gov_soe", "research"}, str(sorted(keys)))
+    # 只断言「2A 的这两套在」，不锁死全集：加模板本来就该只改 yaml，
+    # 这里写成等号的话，每加一套模板都要回来改一次测试
+    check("2A 的两套模板都在", {"gov_soe", "research"} <= keys, str(sorted(keys)))
+    check("模板清单跟着目录走（至少四套）", len(keys) >= 4, str(sorted(keys)))
     for k in ("gov_soe", "research"):
         t = load_template(k)
         check(f"{k} 有名称和描述", bool(t.name) and bool(t.description), f"{t.name} / {t.description}")

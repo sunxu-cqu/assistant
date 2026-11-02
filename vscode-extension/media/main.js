@@ -33,6 +33,18 @@ window.addEventListener("message", (e) => {
   if (m.type === "refresh") {
     refresh().catch(() => {});
   }
+  if (m.type === "templatePreview") {
+    // 只认「当前下拉框选中的那套」：快速连点时先发的可能后到，
+    // 不核对的话会把上一套的图贴到这一套上
+    if (m.dataUri) tplPreview[m.key] = m.dataUri;
+    const box = $("#tplPrev");
+    const sel = $("#genTpl");
+    if (box && sel && sel.value === m.key) {
+      box.innerHTML = m.dataUri
+        ? `<img src="${m.dataUri}" alt="${esc(m.key)} 预览">`
+        : `<div class="hint">预览图没出来：${esc(m.hint || m.error || "未知原因")}</div>`;
+    }
+  }
 });
 
 /* ---------------------------------------------------------------- 工具函数 */
@@ -412,19 +424,42 @@ async function doGen(jobId, template) {
 }
 
 /* 生成前先选模板。默认值按岗位类型给：保研给学术版，实习给单栏版，
-   国企/科研型自己挑——组织性质没法从 JD 里可靠推断，猜错比让人选一下更烦。 */
+   国企/科研型自己挑——组织性质没法从 JD 里可靠推断，猜错比让人选一下更烦。
+   选中就在下面出预览图：文字说明里「单栏」和「双栏」几乎看不出区别。 */
 function openGenModal(jobId, kind) {
   const d = state.data || {};
   const prefer = kind === "baoyan" ? "academic" : "single_column";
+  const keys = (d.templates || []).map((t) => t.key);
   const opts = (d.templates || [])
     .map((t) => `<option value="${esc(t.key)}"${t.key === prefer ? " selected" : ""}>${esc(t.name || t.key)} · ${esc(t.description || "")}</option>`)
     .join("");
   openModal("生成简历", `
-    <div class="field"><label>模板</label><select id="genTpl">${opts}</select></div>
+    <div class="field"><label>模板</label>
+      <select id="genTpl" onchange="loadTplPreview(this.value)">${opts}</select></div>
+    <div id="tplPrev" class="tplprev"><div class="hint">正在渲染预览图…</div></div>
     <div class="hint">同一份内容能渲染成不同版式：投互联网用单栏，联系导师用学术版，
       国企/事业单位用体制内版（带照片位与政治面貌），保研直博或科研岗用科研版（论文与专利单独成段）。
+      预览用内置示例档案渲染，不读你的资料、不花 API 额度。
       选错模板不会丢内容，换个模板重新生成即可。</div>
     <button class="btn btn-primary" onclick="submitGen(${arg(jobId)})">生成</button>`);
+  // 别去读下拉框的 value 反推默认选中项：模板列表里没有 prefer 时浏览器会选第一项，
+  // 而这里要的是「实际选中的那一套」
+  loadTplPreview(keys.includes(prefer) ? prefer : keys[0] || "");
+}
+
+/* 预览图由扩展侧出图后以 data URI 回传：webview 读不了本地文件（CSP 挡着），
+   内联 base64 不用为此放开任何权限。同一套模板只在第一次渲染，之后走缓存。 */
+const tplPreview = {};
+
+function loadTplPreview(key) {
+  const box = $("#tplPrev");
+  if (!box || !key) return;
+  if (tplPreview[key]) {
+    box.innerHTML = `<img src="${tplPreview[key]}" alt="${esc(key)} 预览">`;
+    return;
+  }
+  box.innerHTML = `<div class="hint">正在渲染预览图…</div>`;
+  vscode.postMessage({ type: "previewTemplate", key });
 }
 
 async function submitGen(jobId) {

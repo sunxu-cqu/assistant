@@ -161,6 +161,20 @@ def main() -> int:
     code, body, _ = get("/api/file?path=" + urllib.parse.quote("C:/Windows/win.ini"))
     check("越界文件被拒", code == 403, str(code))
 
+    print("\n[3.5] 模板预览图：选模板前先看版式")
+    code, body, _ = get("/api/templates/two_column/preview")
+    prev = json.loads(body)
+    check("预览接口 200", code == 200, str(code))
+    check("预览返回 png 路径", bool(prev.get("png_path")) and Path(prev["png_path"]).exists(), str(prev)[:160])
+    check("预览是双栏", prev.get("layout") == "two_column", str(prev.get("layout")))
+    code, body, ctype = get("/api/file?path=" + urllib.parse.quote(prev.get("png_path") or ""))
+    check("预览图能取到", code == 200 and "image/png" in ctype, f"{code} {ctype}")
+    check("预览图不是空图", len(body) > 10_000, str(len(body)))
+    code, body, _ = get("/api/templates/nope/preview")
+    bad = json.loads(body)
+    check("模板不存在不 500", code == 200 and bad.get("ok") is False, str(bad)[:160])
+    check("模板不存在给出可用模板", "可用模板" in (bad.get("hint") or ""), str(bad.get("hint"))[:120])
+
     code, res = post(f"/api/apps/{urllib.parse.quote(app_id)}/note", {"note": "HR 说下周约面"})
     check("记一笔成功", res.get("ok") is True, str(res)[:160])
 

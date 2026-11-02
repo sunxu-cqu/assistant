@@ -80,6 +80,7 @@ function fixture() {
       { key: "academic", name: "学术·保研套磁", description: "前置研究兴趣" },
       { key: "gov_soe", name: "体制内·国企版", description: "照片位与政治面貌" },
       { key: "research", name: "科研·论文导向", description: "论文单独成段" },
+      { key: "two_column", name: "双栏·技术岗", description: "左窄右宽" },
     ],
     doctor: {
       ok: true, failed: 0, warned: 1, root: "C:\\简历助手",
@@ -140,6 +141,21 @@ function makeInstance(mode, data) {
           if (onMessage) onMessage({ data: { type: "result", id: m.id, ok: true, data: payload } });
         }, 5);
       }
+      // 模板预览图：扩展侧读 PNG 再回 data URI，这里用一张 1x1 的假图代替
+      if (m.type === "previewTemplate") {
+        setTimeout(() => {
+          if (onMessage) {
+            onMessage({
+              data: {
+                type: "templatePreview",
+                key: m.key,
+                dataUri: m.key === "two_column" ? "" : "data:image/png;base64,iVBORw0KGgo=",
+                hint: m.key === "two_column" ? "PDF 编译失败" : "",
+              },
+            });
+          }
+        }, 5);
+      }
       return Promise.resolve(true);
     },
   };
@@ -147,7 +163,7 @@ function makeInstance(mode, data) {
   const win = { addEventListener(type, fn) { if (type === "message") onMessage = fn; } };
   const factory = new Function(
     "document", "window", "acquireVsCodeApi", "setTimeout",
-    SRC + "\n;return {refresh, render, state, viewBoard, viewJobs, viewKb, viewSystem, doGen, doMatch, doLetter, buildKb, openDeckModal, submitDeck, openGenModal, submitGen, setView};"
+    SRC + "\n;return {refresh, render, state, viewBoard, viewJobs, viewKb, viewSystem, doGen, doMatch, doLetter, buildKb, openDeckModal, submitDeck, openGenModal, submitGen, loadTplPreview, setView};"
   );
   const fns = factory(doc, win, () => api, (fn) => fn());
   return { fns, doc, nodes, sent };
@@ -289,10 +305,28 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log("\n[8] 生成前选模板");
   fns.openGenModal("job_2", "baoyan");
   const genModal = panel.nodes["#modalBody"].innerHTML;
-  check("弹窗列出四套模板", (genModal.match(/<option/g) || []).length === 4,
+  check("弹窗列出五套模板", (genModal.match(/<option/g) || []).length === 5,
     String((genModal.match(/<option/g) || []).length));
   check("保研默认学术版", /value="academic" selected/.test(genModal), genModal.slice(0, 200));
   check("模板带中文名", genModal.includes("体制内·国企版"), genModal.slice(0, 200));
+  check("弹窗带预览区", genModal.includes('id="tplPrev"'), genModal.slice(0, 300));
+
+  const prevReqs = () => panel.sent.filter((x) => x.type === "previewTemplate");
+  check("打开弹窗就请求预览图", prevReqs().length >= 1 && prevReqs()[0].key === "academic",
+    JSON.stringify(prevReqs()[0] || {}));
+  // 桩里没有真实 DOM：innerHTML 只是一段字符串，下拉框的当前值不会自己变，
+  // 而回包时要用它挡住「乱序到达的旧预览图」，所以这里手工同步一下
+  panel.doc.querySelector("#genTpl").value = "academic";
+  await sleep(20);
+  check("预览图内联进弹窗（不放开本地文件权限）",
+    panel.nodes["#tplPrev"].innerHTML.includes('<img src="data:image/png'), panel.nodes["#tplPrev"].innerHTML.slice(0, 120));
+
+  panel.doc.querySelector("#genTpl").value = "two_column";
+  fns.loadTplPreview("two_column");
+  check("切模板会重新请求预览", prevReqs().some((x) => x.key === "two_column"), JSON.stringify(prevReqs().map((x) => x.key)));
+  await sleep(20);
+  check("预览失败时说明原因，不留空框", panel.nodes["#tplPrev"].innerHTML.includes("PDF 编译失败"),
+    panel.nodes["#tplPrev"].innerHTML.slice(0, 120));
 
   fns.openGenModal("job_1", "internship");
   check("实习默认单栏", /value="single_column" selected/.test(panel.nodes["#modalBody"].innerHTML));

@@ -296,6 +296,30 @@ function wire(webview, client, onData) {
       return;
     }
 
+    if (msg.type === "previewTemplate") {
+      // 模板预览图：走 MCP 的 template_preview 出 PNG（示例档案、不花 API 额度），
+      // 再以 data URI 回传。webview 读不了本地文件——CSP 挡着，加进
+      // localResourceRoots 又要把 data/output 整个目录暴露给界面，不如内联。
+      try {
+        const r = await client.call("template_preview", { template: msg.key });
+        let dataUri = "";
+        if (r && r.png_path) {
+          const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(r.png_path));
+          dataUri = "data:image/png;base64," + Buffer.from(bytes).toString("base64");
+        }
+        webview.postMessage({
+          type: "templatePreview",
+          key: msg.key,
+          dataUri,
+          error: (r && r.error) || "",
+          hint: (r && r.hint) || "",
+        });
+      } catch (e) {
+        webview.postMessage({ type: "templatePreview", key: msg.key, dataUri: "", error: e.message });
+      }
+      return;
+    }
+
     if (msg.type === "command" && msg.command === "openBoard") {
       vscode.commands.executeCommand("resumeAssistant.openBoard");
       return;

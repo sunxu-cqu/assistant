@@ -35,11 +35,14 @@
 #grid(columns: (1fr, auto), [#text(weight: "bold")[基于图神经网络的校园社交推荐]], align(right)[#text(size: 10.584pt, fill: rgb("#555555"))[核心成员 | 2025.03 – 至今 | 某大学计算机学院实验室]])
 
 - 冷启动用户前 7 天推荐点击率从 2.1% 提升到 3.4%
+- 复现 LightGCN 与 NGCF 两个基线
+- 设计用户-物品二部图叠加社交子图的双通道聚合结构
 
 #v(3pt)
 #grid(columns: (1fr, auto), [#text(weight: "bold")[推荐算法实习]], align(right)[#text(size: 10.584pt, fill: rgb("#555555"))[算法实习生 | 2025.07 – 2025.09 | 某科技公司]])
 
 - 负责召回通道的特征迭代，离线 AUC 提升 0.008
+- 用 Spark 重算近 30 天行为序列特征
 
 #v(2pt)
 #text(size: 13.524pt, weight: "bold", fill: rgb("#1f3a5f"))[项目经历]
@@ -47,6 +50,8 @@
 #grid(columns: (1fr, auto), [#text(weight: "bold")[校园二手交易平台]], align(right)[#text(size: 10.584pt, fill: rgb("#555555"))[后端负责人 | 2024.03 – 2024.06 | 某大学]])
 
 - 重构检索链路后平均响应时间从 1200ms 降至 180ms
+- 基于 Spring Boot 实现 23 个 REST 接口
+- 用 Elasticsearch 重构商品检索
 
 #v(2pt)
 #text(size: 13.524pt, weight: "bold", fill: rgb("#1f3a5f"))[专业技能]

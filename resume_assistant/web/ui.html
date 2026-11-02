@@ -209,6 +209,15 @@
   .field textarea{min-height:120px;resize:vertical;line-height:1.6}
   /* 弹窗里的说明：讲清这一步做了什么、别改哪里，比正文小一档 */
   .hint{font-size:12px;line-height:1.65;color:var(--muted);margin:2px 0 12px}
+  /* 模板预览：选模板前先看版式，比读一行文字说明有用得多。
+     固定高度 + 顶部对齐，切换模板时弹窗不会跟着一跳一跳 */
+  .tplprev{
+    height:46vh;min-height:260px;overflow:auto;margin:0 0 14px;
+    border:1px solid var(--line);border-radius:10px;background:#fff;padding:10px;
+    display:flex;align-items:flex-start;justify-content:center
+  }
+  .tplprev img{max-width:100%;height:auto;display:block;border-radius:4px}
+  .tplprev .hint{margin:0;padding:8px 4px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
   @media (max-width:720px){.grid2{grid-template-columns:1fr}}
 
@@ -609,7 +618,8 @@ async function doMatch(jobId) {
 }
 
 /* 生成前先选模板。默认值按岗位类型给：保研给学术版，实习给单栏版；
-   国企/科研型自己挑——组织性质没法从 JD 里可靠推断，猜错比让人选一下更烦。 */
+   国企/科研型自己挑——组织性质没法从 JD 里可靠推断，猜错比让人选一下更烦。
+   选中就在下面出预览图：文字说明里「单栏」和「双栏」几乎看不出区别。 */
 function openGenModal(jobId, kind) {
   const d = state.data || {};
   const prefer = kind === "baoyan" ? "academic" : "single_column";
@@ -617,11 +627,32 @@ function openGenModal(jobId, kind) {
     .map(t => `<option value="${esc(t.key)}"${t.key === prefer ? " selected" : ""}>${esc(t.name || t.key)} · ${esc(t.description || "")}</option>`)
     .join("");
   openModal("生成简历", `
-    <div class="field"><label>模板</label><select id="genTpl">${opts}</select></div>
+    <div class="field"><label>模板</label>
+      <select id="genTpl" onchange="loadTplPreview(this.value)">${opts}</select></div>
+    <div id="tplPrev" class="tplprev"><div class="hint">正在渲染预览图…</div></div>
     <div class="hint">同一份内容能渲染成不同版式：投互联网用单栏，联系导师用学术版，
       国企/事业单位用体制内版（带照片位与政治面貌），保研直博或科研岗用科研版（论文与专利单独成段）。
+      预览用内置示例档案渲染，不读你的资料、不花 API 额度。
       选错模板不会丢内容，换个模板重新生成即可。</div>
     <button class="btn btn-primary" onclick="submitGen(${arg(jobId)})">生成</button>`);
+  loadTplPreview($("#genTpl").value);
+}
+
+/* 切换模板时只换图，不重建弹窗——重建会丢焦点、也会让弹窗闪一下 */
+async function loadTplPreview(key) {
+  const box = $("#tplPrev");
+  if (!box || !key) return;
+  box.innerHTML = `<div class="hint">正在渲染预览图…</div>`;
+  try {
+    const r = await api(`/api/templates/${encodeURIComponent(key)}/preview`);
+    if (!r.ok || !r.png_path) {
+      box.innerHTML = `<div class="hint">预览图没出来：${esc(r.hint || r.error || "未知原因")}</div>`;
+      return;
+    }
+    box.innerHTML = `<img src="/api/file?path=${encodeURIComponent(r.png_path)}" alt="${esc(key)} 预览">`;
+  } catch (e) {
+    box.innerHTML = `<div class="hint">预览失败：${esc(String(e.message || e))}</div>`;
+  }
 }
 
 async function submitGen(jobId) {

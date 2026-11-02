@@ -387,6 +387,21 @@ def _interest_section(
     )
 
 
+def _mock_bullets(ev: Evidence, limit: int) -> list[dict[str, Any]]:
+    """离线模式也要给出「像真的」的 bullet：claim 打头，再补 STAR 里的动作。
+
+    只回一条 claim 的话，离线跑出来的简历永远比真实生成瘦一半——预览会显得版面
+    空荡荡（双栏一页到底装不装得下就看不出来），冒烟测试也在测一个更宽松的场景。
+    这里按模板的 bullets_per_entry 条数补足，措辞直接取证据原文，不编。
+    """
+    texts: list[str] = []
+    for t in [ev.claim or ev.title, *(ev.star.action or [])]:
+        t = (t or "").strip()
+        if t and t not in texts:
+            texts.append(t)
+    return [{"text": t[:60], "metrics": []} for t in texts[: max(1, limit)]]
+
+
 def _llm_bullets(
     job: Job,
     selected: list[Evidence],
@@ -426,10 +441,7 @@ def _llm_bullets(
     )
     mock = {
         "entries": [
-            {
-                "evidence_id": ev.id,
-                "bullets": [{"text": (ev.claim or ev.title)[:45], "metrics": []}],
-            }
+            {"evidence_id": ev.id, "bullets": _mock_bullets(ev, bullets_per_entry)}
             for ev in selected
         ]
     }

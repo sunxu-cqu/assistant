@@ -394,6 +394,7 @@ WorkBuddy 的配置文件是 `~/.workbuddy-ai/mcp.json`。写完后需要在连�
 | `deck_generate` | 保研套磁 PPT（个人陈述，一个项目一页） |
 | `deck_templates` | 套磁 PPT 模板列表 |
 | `template_list` | 模板列表 |
+| `template_preview` | 模板预览图（PNG，示例档案渲染，不花 API 额度） |
 | `app_list` / `app_detail` / `app_advance` | 投递记录与状态机 |
 | `app_timeline` | 状态流转历史 |
 | `app_note` | 记一笔备注（不改状态，只进时间线） |
@@ -560,9 +561,49 @@ VSCode 插件里在保研岗位卡片上点「套磁 PPT」即可，会先让你
 | `academic` | 保研套磁 | 前置研究兴趣与科研经历 |
 | `gov_soe` | 国企 / 事业单位 | 照片位、政治面貌与籍贯、荣誉前置、家庭成员、配色克制 |
 | `research` | 保研 / 直博 / 科研岗 | 论文与专利单独成段，教育段前置 GPA 与排名、带实验室与导师 |
+| `two_column` | 技术岗 / 内容多 | 双栏：左窄（技能、荣誉）右宽（实习、项目），教育背景整幅置顶 |
 
 **加单栏模板只需复制一个 yaml 改字段，不用动代码**——内容层（IR）与版式层解耦，同一份内容能渲染成多套版式。
-（双栏不在此列，见 [ROADMAP](ROADMAP.md) 2B。）
+双栏是另一回事：`two_column` 用上了 `page.layout: two_column`，走的是 `layout()` 里的另一条分支（见下「版式」）。
+
+### 选模板之前先看一眼
+
+```bash
+./.venv/Scripts/python.exe -m resume_assistant.cli template-preview            # 全部模板各出一张
+./.venv/Scripts/python.exe -m resume_assistant.cli template-preview two_column # 只出这一套
+```
+
+产物在 `data/output/_templates/<模板>/preview.png`（同时留 PDF 和 .typ）。
+用**内置示例档案**渲染，不读你的资料、不调模型、不花 API 额度——还没填资料、没配 key 的机器上也能跑。
+插件和网页里点「生成简历」，选模板的下方也会直接出这张图。
+
+> 为什么不直接 `gen` 一遍看效果：那要跑一次模型（几千 token），而且会污染你的投递记录。
+
+### 版式
+
+| `page.layout` | 行为 | 谁在用 |
+|---|---|---|
+| 不写 / `single` | 所有段按模板顺序依次排下来 | 四套单栏模板 |
+| `two_column` | `column: full` 的段整幅排在两栏之上，其余按 `column: left/right` 分栏 | `two_column` |
+
+```yaml
+page:
+  layout: two_column
+  columns_ratio: [1, 1.75]     # 左窄右宽；不写就是 [1, 1]
+  column_gutter: 1.5em         # 栏间距
+sections:
+  - type: education
+    column: full               # 整幅：教育背景横跨两栏，否则左栏第一眼是「专业技能」，很怪
+  - type: skills
+    column: left
+  - type: projects
+    column: right
+```
+
+两条降级规则，都是踩过坑才加的：
+
+- **只有一栏有内容就不画栏**。模板声明了 `two_column` 但实际只有左栏有段时，退回单栏——否则内容被挤在半幅宽里，右半边全空。
+- **栏内条目名与时间分两行**。栏宽只有半页，`标题 + 日期` 并排会各自折行，中文能在任意字符处断行，标题会被劈成「…校园社交 / 推荐」这种断法。所以窄栏改成上下两行，并且各自包一层 `#block[...]`——typst 里连续两行 inline 文本会并成同一段，不包就是「标题核心成员 | 2025.03」粘在一起。
 
 段序、`include_kinds`、`variant` 都在 yaml 里，取值为固定集合：
 
@@ -614,7 +655,7 @@ sections:
 | 抓取能力弱 | JS 渲染页取不到正文，会引导改手动粘贴 | 视需要接 Playwright |
 | 界面 | 有 VSCode 扩展（活动栏 + 四栏看板）和一个本地网页兜底；不是 JetBrains 插件 | 需要的话再包一层 |
 | 单语言 | 只支持中文 | — |
-| 只有单栏 | 渲染器是顺序流（一路 `lines.append`），没有布局抽象，双栏要重构 | ROADMAP 2B |
+| 只有两种版式 | 单栏顺序流 + 双栏（左窄右宽）；没有「左侧通栏时间轴」「两页展开」这类版式 | 需要再加 `layout()` 分支 |
 | 文本框顺序 | 浮动文本框各自定位，XML 顺序不等于眼睛看到的顺序，标题可能排在内容后面（内容不丢） | 按锚点坐标排序收益有限，暂不做 |
 | xlsx 公式 | 从没被 Excel 打开保存过的文件没有公式缓存，只能读到 `=B2*C2` 而非计算结果 | 需要用户用 Excel 打开存一次 |
 
@@ -652,20 +693,23 @@ set RESUME_ASSISTANT_MOCK=1
 # MCP 协议握手（initialize / tools/list / tools/call / 错误路径 / stderr 干净度）
 ./.venv/Scripts/python.exe tests/test_mcp.py
 
-# 界面层（页面能开 / 数据能拿 / 动作能执行 / 越界访问被挡 / 前端渲染 64 项）
+# 界面层（71 项：页面能开 / 数据能拿 / 动作能执行 / 越界访问被挡 / 模板预览图 / 前端渲染）
 ./.venv/Scripts/python.exe tests/web_smoke.py
 
 # VSCode 扩展（30 项：清单 / 激活 / 视图 HTML / 真实 MCP 调用 / 错误路径）
 node tests/vscode_smoke.js
 
-# VSCode 扩展的 webview（52 项：四视图渲染 / 点击→工具名映射 / 路径转义 / 套磁 PPT / 模板选择）
+# VSCode 扩展的 webview（57 项：四视图渲染 / 点击→工具名映射 / 路径转义 / 套磁 PPT / 模板选择与预览图）
 node tests/vscode_render.js
 
-# 模板排版预览（假档案 + 假证据走真实组稿，四套模板各出一份 PDF 到 data/output/_preview/）
+# 模板排版预览（示例档案走真实组稿，五套模板各出一份 PDF + PNG 到 data/output/_preview/）
 ./.venv/Scripts/python.exe tests/preview_template.py
 
-# 两套新模板（体制内/国企版、科研·论文导向）48 项：段序 / 字段口径 / 照片位 / 论文不串段
+# 两套新模板（体制内/国企版、科研·论文导向）49 项：段序 / 字段口径 / 照片位 / 论文不串段
 ./.venv/Scripts/python.exe tests/templates_2a.py
+
+# 双栏版式与模板预览 51 项：段落归属 / 整幅置顶 / 窄栏不粘连 / 降级 / 无 key 也能预览
+./.venv/Scripts/python.exe tests/two_column.py
 
 # 生成刁难用的测试资料（10 个文件夹：docx/PDF/扫描件/超长/空目录/无数字）
 ./.venv/Scripts/python.exe tests/make_fixtures.py
@@ -742,13 +786,15 @@ node tests/vscode_render.js
 | 边界：损坏的 profile.yaml 给出行号，损坏的证据文件被统计并告警 | 通过 |
 | 边界：8 线程并发写备注不丢，并发建档只产生一条 | 通过 |
 | 边界：单文件超 20MB 直接跳过（数据集/录屏读进来只是噪声） | 通过 |
-| MCP stdio 握手 + 27 个工具 | 通过 |
+| MCP stdio 握手 + 28 个工具 | 通过 |
 | 语义召回：装了走融合、没装退回 BM25、编码器抛异常也不影响匹配 | 通过 |
 | OCR：没装时给出启用方法；装了就按页识别（用假引擎验证过整条链路） | 通过 |
 | 本地界面：页面能开、数据能拿、动作能执行、越界访问被挡、8 并发稳定 | 通过 |
 | 前端渲染：不开浏览器跑内联脚本，有告警 / 有截止 / 有 PDF / OCR 开关两种状态都渲染正确 | 通过 |
 | VSCode 扩展：桩掉 vscode 模块，激活 / 视图 HTML / 真实 MCP 调用 / 错误路径 30 项 | 通过 |
-| 扩展 webview：四视图渲染 + 点击发出去的工具名与参数 + Windows 路径转义 + 套磁 PPT + 模板选择 52 项 | 通过 |
+| 扩展 webview：四视图渲染 + 点击发出去的工具名与参数 + Windows 路径转义 + 套磁 PPT + 模板选择与预览图 57 项 | 通过 |
+| 双栏版式：段落按 `column` 归栏、整幅段置顶、窄栏标题与日期不粘连、只有一栏时退回单栏 | 通过 |
+| 模板预览图：示例档案渲染、不花 API 额度、没配 key 也能出图 | 通过 |
 
 真实 API 端到端跑通 5 个岗位（3 实习 + 2 保研），简历全部 0 错误生成，2 封套磁信 0 编造风险。
 另有一组「像真人资料」的 8 个文件夹（多文件项目 / 备份文件夹 / docx 表格 / 6MB 日志 / 25MB csv / 扫描件 / GBK 笔记）跑通全流程：8 条证据，实习 1 页、保研 1 页，均 0 错误。

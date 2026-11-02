@@ -1,0 +1,40 @@
+key: two_column
+name: 双栏·技术岗
+description: 教育背景整幅、左栏技能与荣誉、右栏实习与项目；一页塞下更多经历，适合互联网技术岗
+page:
+  margin_x: 1.5cm
+  margin_y: 1.3cm
+  # 双栏的每栏更窄，基准字号要小一点，否则 45 字的 bullet 会折成三行
+  font_size: 9.5pt
+  max_scale: 1.08
+  accent: "#2b4a6f"
+  layout: two_column
+  # 左栏窄、右栏宽：左栏是「查得到的信息」（学校、技能、奖），右栏才是要读的正文
+  columns_ratio: [1, 1.75]
+  column_gutter: 1.5em
+sections:
+  # 教育背景整幅：学校/专业/时间横排才看得清，塞进窄栏会被压成四行
+  - type: education
+    title: 教育背景
+    column: full
+    max_entries: 2
+  - type: skills
+    title: 专业技能
+    column: left
+    max_entries: 1
+  - type: honors
+    title: 荣誉奖项
+    column: left
+    max_entries: 6
+  - type: experience
+    title: 实习经历
+    column: right
+    max_entries: 2
+    bullets_per_entry: 3
+    include_kinds: [intern, research]
+  - type: projects
+    title: 项目经历
+    column: right
+    max_entries: 4
+    bullets_per_entry: 3
+    include_kinds: [project, course, award, activity]

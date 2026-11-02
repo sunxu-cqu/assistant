@@ -338,6 +338,33 @@ def templates_cmd() -> None:
         typer.echo(f"{t['key']:16s} {t['name']}  —  {t['description']}")
 
 
+@app.command("template-preview")
+def template_preview_cmd(
+    key: str = typer.Argument("", help="模板 key；留空则把全部模板都渲染一遍"),
+    pages: int = typer.Option(1, "--pages", "-p", help="输出前几页（双栏通常一页就够看）"),
+) -> None:
+    """渲染模板预览图（PNG），用内置示例档案，不读你的资料、不调模型。"""
+    keys = [key] if key else [t["key"] for t in pipeline.all_templates()]
+    failed: list[str] = []
+    for k in keys:
+        res = pipeline.template_preview(k, max_pages=pages)
+        if not res.get("ok"):
+            typer.echo(f"{k:16s} 失败：{res.get('error')}")
+            if res.get("hint"):
+                typer.echo(f"{'':16s} {res['hint']}")
+            failed.append(k)
+            continue
+        layout = "双栏" if res["layout"] == "two_column" else "单栏"
+        typer.echo(f"{k:16s} {res['name']}  · {layout} · {res['page_count'] or '?'} 页")
+        typer.echo(f"{'':16s} 预览图：{res['png_path'] or '（PNG 没出，直接看 PDF）'}")
+        typer.echo(f"{'':16s} PDF：{res['pdf_path']}")
+        typer.echo(f"{'':16s} 段序：{' / '.join(res['sections'])}")
+        if res["lint"]["errors"]:
+            typer.echo(f"{'':16s} ! 示例档案校验有 {len(res['lint']['errors'])} 处错误，见 lint.errors")
+    if failed:
+        raise typer.Exit(1)
+
+
 @app.command("letter")
 def letter_cmd(job_id: str) -> None:
     """生成保研套磁信（主题 + 正文）。"""

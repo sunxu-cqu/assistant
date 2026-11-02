@@ -315,6 +315,16 @@ body[data-mode="panel"] #app { height: 100%; display: flex; flex-direction: colu
 /* 弹窗里的说明文字：讲清楚这一步做了什么、别改哪里，字号比正文小一档 */
 .hint { font-size: 11.5px; line-height: 1.6; color: var(--muted); margin: 2px 0 12px; }
 
+/* 模板预览：侧栏很窄，预览图按宽度缩放、固定高度可滚动。
+   底色固定白（纸张是白的），否则深色主题下图片边缘会糊进背景 */
+.tplprev {
+  height: 40vh; min-height: 200px; overflow: auto; margin: 0 0 12px;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 8px;
+  display: flex; align-items: flex-start; justify-content: center;
+}
+.tplprev img { max-width: 100%; height: auto; display: block; }
+.tplprev .hint { margin: 0; padding: 6px 4px; }
+
 /* ---------------------------------------------------------------- 提示 */
 
 #toast {

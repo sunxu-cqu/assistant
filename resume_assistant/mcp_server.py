@@ -304,6 +304,20 @@ def template_list() -> dict:
 
 
 @mcp.tool()
+def template_preview(template: str = "single_column") -> dict:
+    """渲染一张模板预览图（PNG + PDF），返回 png_path 供直接打开查看。
+
+    用内置示例档案渲染，不读用户资料、不调模型、不花 API 额度——所以没填资料、
+    没配 key 的机器上也能跑。选模板前先看这一眼：`template_list` 只有一行文字，
+    「单栏」和「双栏」在文字上几乎没区别。
+
+    返回值里 sections 是这份示例实际出的段序（能看出荣誉有没有提前、论文是否单独成段），
+    layout 是 single / two_column。
+    """
+    return _safe(pipeline.template_preview, template_key=template)
+
+
+@mcp.tool()
 def deck_generate(job_id: str, template: str = "baoyan_academic") -> dict:
     """为保研岗位生成套磁用 PPT（个人陈述），写入 data/output/<app_id>/deck.pptx。
 
