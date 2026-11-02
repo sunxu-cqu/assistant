@@ -228,6 +228,49 @@ def main() -> int:
     rev = json.loads(body)
     check("kb review 有 findings 字段", "findings" in rev, str(list(rev.keys()))[:120])
 
+    print("\n[4.5] 批量操作接口")
+    # 录第二个岗位，凑够两个做批量
+    code, res2 = post(
+        "/api/jobs",
+        {
+            "kind": "internship",
+            "org": "某厂2",
+            "title": "后端开发实习",
+            "raw_text": "负责后端 API。要求 Java、MySQL、分布式。",
+        },
+    )
+    job_id2 = res2.get("job", {}).get("id", "")
+    check("录第二个岗位", res2.get("ok") is True, str(res2)[:120])
+
+    # batch match
+    code, res = post("/api/batch/match", {"job_ids": [job_id, job_id2]})
+    check("batch match 200", code == 200, str(code))
+    check("batch match ok", res.get("ok") is True, str(res)[:200])
+    check("batch match total=2", res.get("total") == 2, str(res.get("total")))
+    check("batch match succeeded=2", res.get("succeeded") == 2, str(res.get("succeeded")))
+
+    # rank
+    code, body, _ = get("/api/rank?top=5")
+    rank = json.loads(body)
+    check("rank 200", code == 200, str(code))
+    check("rank ok", rank.get("ok") is True, str(rank)[:200])
+    check("rank 有 items", isinstance(rank.get("items"), list), str(rank)[:120])
+
+    # compare
+    code, res = post("/api/compare", {"job_ids": [job_id, job_id2]})
+    check("compare 200", code == 200, str(code))
+    check("compare ok", res.get("ok") is True, str(res)[:200])
+    check("compare total=2", res.get("total") == 2, str(res.get("total")))
+    check("compare rows 有 status", all("status" in r for r in res.get("rows", [])), str(res.get("rows"))[:200])
+
+    # batch generate（用 mock，会比较慢但能过）
+    code, res = post("/api/batch/generate", {"job_ids": [job_id2], "template": "single_column"})
+    check("batch gen 200", code == 200, str(code))
+    check("batch gen ok", res.get("ok") is True, str(res)[:200])
+    check("batch gen total=1", res.get("total") == 1, str(res.get("total")))
+    gen_item = (res.get("results") or [{}])[0]
+    check("batch gen 成功项有 pdf", gen_item.get("ok") and bool(gen_item.get("pdf_path")), str(gen_item)[:200])
+
     print("\n[5] 并发与稳定性")
     results: list[int] = []
 

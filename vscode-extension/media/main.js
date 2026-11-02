@@ -296,13 +296,27 @@ function viewJobs(d) {
         <button class="btn btn-ghost btn-tiny" onclick="openGenModal(${arg(j.id)}, ${arg(j.kind)})">生成简历</button>
         <button class="btn btn-ghost btn-tiny" onclick="doLetter(${arg(j.id)}, ${arg(j.kind)})">${j.kind === "baoyan" ? "套磁信" : "开场白"}</button>
         ${j.kind === "baoyan" ? `<button class="btn btn-ghost btn-tiny" onclick="openDeckModal(${arg(j.id)})">套磁 PPT</button>` : ""}
+        <label class="chip" style="cursor:pointer;display:inline-flex;align-items:center;gap:3px;font-size:11px">
+          <input type="checkbox" class="job-cb" value="${esc(j.id)}" style="margin:0"> 选择
+        </label>
       </div>
     </div>`).join("")
     || `<div class="empty" style="margin:14px">岗位池是空的。点右上角「录入岗位」，或先跑一次知识库抽取。</div>`;
 
+  const batchBar = d.jobs.length >= 2 ? `
+    <div class="batch-bar" style="display:flex;gap:8px;align-items:center;padding:8px 12px;margin-bottom:8px;
+         background:var(--bg-alt);border-radius:6px">
+      <span class="s">已选 <b id="batchCount">0</b> / ${d.jobs.length} 个岗位</span>
+      <button class="btn btn-ghost btn-tiny" onclick="batchMatch()">批量匹配</button>
+      <button class="btn btn-ghost btn-tiny" onclick="showRank()">排序推荐</button>
+      <button class="btn btn-ghost btn-tiny" onclick="batchGen()">批量生成</button>
+      <button class="btn btn-ghost btn-tiny" onclick="showCompare()">横向对比</button>
+    </div>` : "";
+
   return `<div class="panel">
     <div class="panel-head"><h3>岗位 / 导师</h3><span class="sub">${d.jobs.length} 个目标</span></div>
-    <div class="rows">${rows}</div>
+    ${batchBar}
+    <div class="rows" id="jobRows">${rows}</div>
   </div>`;
 }
 
@@ -606,6 +620,131 @@ async function submitNote(appId) {
   if (!note) { toast("备注不能为空", "err"); return; }
   closeModal();
   await act(async () => rpc("app_note", { app_id: appId, note }), "已记录");
+}
+
+/* ---------------------------------------------------------------- 批量操作 */
+
+function selectedJobs() {
+  return Array.from(document.querySelectorAll(".job-cb:checked")).map((cb) => cb.value);
+}
+
+function updateBatchCount() {
+  const el = $("#batchCount");
+  if (el) el.textContent = String(selectedJobs().length);
+}
+
+document.addEventListener("change", (e) => {
+  if (e.target.classList.contains("job-cb")) updateBatchCount();
+});
+
+async function batchMatch() {
+  const ids = selectedJobs();
+  if (!ids.length) { toast("先勾选要匹配的岗位", "err"); return; }
+  await act(async () => {
+    const r = await rpc("batch_match", { job_ids: ids });
+    const ok = r.succeeded || 0;
+    const fail = r.failed || 0;
+    toast(`批量匹配完成 · ${ok} 成功${fail ? ` / ${fail} 失败` : ""}`, fail ? "err" : "ok");
+    openBatchModal("批量匹配结果", r.results);
+    return r;
+  });
+}
+
+async function showRank() {
+  await act(async () => {
+    const r = await rpc("rank_jobs", { top_n: 10 });
+    openRankModal(r);
+    return r;
+  });
+}
+
+async function batchGen() {
+  const ids = selectedJobs();
+  if (!ids.length) { toast("先勾选要生成的岗位", "err"); return; }
+  const d = state.data || {};
+  const opts = (d.templates || [])
+    .map((t) => `<option value="${esc(t.key)}">${esc(t.name || t.key)}</option>`).join("");
+  openModal("批量生成简历", `
+    <div class="field"><label>模板</label><select id="bgTpl">${opts}</select></div>
+    <div class="hint">对选中的 ${ids.length} 个岗位逐个生成简历，每个约 30~60 秒。
+      建议先批量匹配看哪些值得投，再批量生成。</div>
+    <button class="btn btn-primary" onclick="submitBatchGen(${arg(ids.join(","))})">开始生成</button>`);
+}
+
+async function submitBatchGen(idStr) {
+  const ids = idStr.split(",").filter(Boolean);
+  const tpl = $("#bgTpl").value;
+  closeModal();
+  await act(async () => {
+    const r = await rpc("batch_generate", { job_ids: ids, template: tpl });
+    const ok = r.succeeded || 0;
+    const fail = r.failed || 0;
+    toast(`批量生成完成 · ${ok} 成功${fail ? ` / ${fail} 失败` : ""}`, fail ? "err" : "ok");
+    openBatchModal("批量生成结果", r.results);
+    return r;
+  });
+}
+
+async function showCompare() {
+  const ids = selectedJobs();
+  if (ids.length < 2) { toast("至少勾选两个岗位来对比", "err"); return; }
+  await act(async () => {
+    const r = await rpc("compare", { job_ids: ids });
+    openCompareModal(r);
+    return r;
+  });
+}
+
+function openBatchModal(title, results) {
+  const rows = (results || []).map((r) => {
+    if (r.ok) {
+      const detail = r.pdf_path
+        ? `${r.pages || "?"} 页 · ${esc(r.pdf_path)}`
+        : `命中 ${r.hits_count || 0} · 最高 ${r.top_score || 0}`;
+      return `<div class="row"><div><div class="t">${esc(r.job_id)}</div>
+        <div class="s">${detail}</div></div><div class="r"><span class="chip ok">✓</span></div></div>`;
+    }
+    return `<div class="row"><div><div class="t">${esc(r.job_id)}</div>
+      <div class="s">${esc(r.error || "")}</div></div><div class="r"><span class="chip err">✗</span></div></div>`;
+  }).join("");
+  openModal(title, `<div class="rows">${rows}</div>`);
+}
+
+function openRankModal(r) {
+  const items = r.items || [];
+  if (!items.length) {
+    openModal("排序推荐", `<div class="empty">还没有匹配报告。先对岗位跑匹配。</div>`);
+    return;
+  }
+  const rows = items.map((it) => `
+    <div class="row">
+      <div><div class="t">${esc(it.title)} <span class="chip brand">${it.adjusted_score}</span></div>
+      <div class="s">${esc(it.org || "—")} · 命中 ${it.hits_count} · gap ${it.gaps_count}${it.blocked ? " · ⚠硬性不符" : ""}</div></div>
+    </div>`).join("");
+  const hint = r.hint ? `<div class="hint">${esc(r.hint)}</div>` : "";
+  openModal("排序推荐 · 值得投的前 N 个", `<div class="rows">${rows}</div>${hint}`);
+}
+
+function openCompareModal(r) {
+  const rows = (r.rows || []).map((row) => {
+    if (row.status === "job_not_found") {
+      return `<div class="row"><div><div class="t">${esc(row.job_id)}</div>
+        <div class="s">岗位不存在</div></div></div>`;
+    }
+    if (row.status === "no_match") {
+      return `<div class="row"><div><div class="t">${esc(row.title)}</div>
+        <div class="s">${esc(row.org || "—")} · 还没匹配</div></div></div>`;
+    }
+    const pages = row.pages ? `${row.pages} 页` : "未生成";
+    const blocked = row.blocked ? " ⚠" : "";
+    return `<div class="row">
+      <div><div class="t">${esc(row.title)} <span class="chip brand">${row.top_score || 0}</span></div>
+      <div class="s">${esc(row.org || "—")} · 命中 ${row.hits_count || 0} · gap ${row.gaps_count || 0}${blocked}</div></div>
+      <div class="r"><span class="chip">${esc(row.status)}</span> <span class="chip">${pages}</span></div>
+    </div>`;
+  }).join("");
+  const hint = r.hint ? `<div class="hint">${esc(r.hint)}</div>` : "";
+  openModal("横向对比", `<div class="rows">${rows}</div>${hint}`);
 }
 
 function openNewJob() {

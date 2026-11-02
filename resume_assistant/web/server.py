@@ -66,6 +66,19 @@ ROUTES: list[Route] = [
         location=req.body.get("location", ""),
     )),
     ("POST", r"^/api/jobs/(?P<id>[^/]+)/match$", lambda req, m: pipeline.run_match(m["id"])),
+    # 批量操作：先匹配看哪些值得投，再排序推荐，批量生成，横向对比
+    ("POST", r"^/api/batch/match$", lambda req, m: pipeline.batch_match(
+        req.body.get("job_ids", []), refresh=bool(req.body.get("refresh", False))
+    )),
+    ("GET", r"^/api/rank$", lambda req, m: pipeline.rank_jobs(
+        job_ids=None, top_n=int(req.query.get("top", ["10"])[0])
+    )),
+    ("POST", r"^/api/batch/generate$", lambda req, m: pipeline.batch_generate(
+        req.body.get("job_ids", []), template_key=req.body.get("template", "single_column")
+    )),
+    ("POST", r"^/api/compare$", lambda req, m: pipeline.compare(
+        req.body.get("job_ids", [])
+    )),
     # 模板预览图：用内置示例档案渲染，不读用户资料、不花 API 额度。
     # 前端「生成简历」弹窗里选模板时调它，图走 /api/file 取。
     ("GET", r"^/api/templates/(?P<key>[^/]+)/preview$", lambda req, m: pipeline.template_preview(m["key"])),

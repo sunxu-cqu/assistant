@@ -353,6 +353,62 @@ def deck_rerender(app_id: str, template: str = "") -> dict:
     return _safe(pipeline.rerender_deck, app_id=app_id, template_key=template)
 
 
+# ---------------------------------------------------------------- 批量操作
+
+@mcp.tool()
+def batch_match(job_ids: list[str], refresh: bool = False) -> dict:
+    """对多个岗位批量做匹配。纯本地计算（BM25 + 规则 + 模型精排），不生成简历。
+
+    投 10 家公司之前先把匹配报告都跑出来：看哪些命中数和分数明显高、
+    哪些 gap 太多不值得投。比逐个 match + gen 省得多——gen 每次要调模型改写措辞。
+
+    返回 results 数组，每条含 job_id / ok / cached / blocked / hits_count /
+    top_score / gaps_count。单个失败不影响其他。
+    """
+    return _safe(pipeline.batch_match, job_ids=job_ids, refresh=refresh)
+
+
+@mcp.tool()
+def rank_jobs(job_ids: list[str] | None = None, top_n: int = 10) -> dict:
+    """从已有匹配报告里排序，给出值得投的前 N 个岗位。
+
+    排序逻辑：top8 命中均分 - max(0, gap数-5)×3。gap 超过 5 条的降权：
+    缺口说明知识库里没有对应证据，写出来的简历会空。
+    blocked=true 的岗位仍会出现在列表里，但 adjusted_score 不额外扣分
+    （硬性不符是不可投，不是「不太合适」，用户应自行排除）。
+
+    job_ids 留空则取全部已有匹配报告。没匹配报告的岗位不参与排序。
+    """
+    return _safe(pipeline.rank_jobs, job_ids=job_ids, top_n=top_n)
+
+
+@mcp.tool()
+def batch_generate(job_ids: list[str], template: str = "single_column") -> dict:
+    """对多个岗位批量生成简历。每个岗位各出一份 PDF。
+
+    跟 batch_match 的区别：这一步调模型改写措辞、调渲染器出 PDF，
+    每个岗位约 30~60 秒。建议先 batch_match + rank_jobs 看哪些值得投，再 batch_generate。
+
+    返回 results 数组，每条含 job_id / ok / application_id / pdf_path / pages /
+    lint_errors / lint_warnings。单个失败不影响其他。
+    """
+    return _safe(pipeline.batch_generate, job_ids=job_ids, template_key=template)
+
+
+@mcp.tool()
+def compare(job_ids: list[str]) -> dict:
+    """同一份资料投 N 家，横向对比表。
+
+    把多个岗位的匹配报告、生成结果并排展示：分数、命中数、gap、页数。
+    用来回答「我到底该投哪家」——单看一个岗位看不出优劣，
+    并排比才能发现「A 分数高但 gap 多、B 分数低但全对口」。
+
+    status 字段：matched=只跑了匹配 / generated=已生成简历 / no_match=还没匹配。
+    前提：参与对比的岗位最好都跑过 match。
+    """
+    return _safe(pipeline.compare, job_ids=job_ids)
+
+
 # ------------------------------------------------------------------ 状态机
 
 @mcp.tool()

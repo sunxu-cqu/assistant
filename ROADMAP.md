@@ -13,9 +13,10 @@ P0 / P1 / P2 都已完成并验证：
 - 双线状态机（实习 / 保研），投递看板与跟进提醒
 - 五套简历模板（通用实习 / 学术套磁 / 体制内国企 / 科研论文导向 / 双栏技术岗）+ 两套保研套磁 PPT 模板
 - 模板预览图：选模板之前先看一眼版式，不花 API 额度
-- 三个入口共用一套契约：CLI、MCP（28 个工具）、VSCode 扩展
-- 测试：smoke 97 / edge 106 / cli 89 / mcp 39 / web 71 / 扩展 30 / 渲染 57 /
-  deck 43 / templates_2a 49 / two_column 51 / office_real 30 /
+- 批量操作：批量匹配 → 排序推荐 → 批量生成 → 横向对比
+- 三个入口共用一套契约：CLI、MCP（32 个工具）、VSCode 扩展
+- 测试：smoke 97 / edge 106 / cli 89 / mcp 42 / web 87 / 扩展 30 / 渲染 64 /
+  deck 43 / templates_2a 49 / two_column 51 / batch 60 / office_real 30 /
   e2e_opensource 33 / e2e_folders 36 / e2e_real 5 岗位
 
 ## 还没验证的
@@ -118,17 +119,29 @@ Office 解析已经过真实文件验证（见第一轮）。仍然没覆盖的�
 
 ---
 
-## 第三轮 · 批量投递
+## 第三轮 · 批量投递 ✅ 已完成（2026-11-02）
 
 **场景**：这周要投 10 家，不想一家一家点。
 
-| # | 任务 | 关键取舍 |
+| # | 任务 | 实现要点 |
 |---|---|---|
-| 3.1 | `batch_match(job_ids)` | 纯本地计算，便宜，一次算 20 个没问题 |
-| 3.2 | 排序 + 推荐「值得投的前 N 个」 | **不要无脑全生成**，10 个岗位 × 每次几千 token 会失控 |
-| 3.3 | `batch_generate(job_ids, template)` | 单个岗位失败不影响其他，返回 per-job 结果 |
-| 3.4 | 横向对比表 | 同一份资料投 5 家，哪家匹配度最高、差在哪 |
-| 3.5 | 三处入口 | CLI / MCP / 插件契约统一，别各写一遍 |
+| 3.1 | `batch_match(job_ids)` | 逐个调 `run_match`，返回 per-job 结果（ok/cached/blocked/score/hits/gaps）。单个失败不影响其他。CLI `batch-match`，MCP `batch_match` |
+| 3.2 | `rank_jobs(job_ids=None, top_n=10)` | top8 命中均分 - max(0, gap数-5)×3。gap 降权：缺口多说明简历会空。blocked 不额外扣分（硬性不符是「不可投」不是「不太合适」）。CLI `rank`，MCP `rank_jobs` |
+| 3.3 | `batch_generate(job_ids, template)` | 逐个调 `generate_resume`，单个失败不影响其他。返回 per-job PDF 路径/页数/校验错误。CLI `batch-gen`，MCP `batch_generate` |
+| 3.4 | `compare(job_ids)` | 并排表：job_id/title/org/score/hits/gap/blocked/pages/status。status 区分 matched/generated/no_match。CLI `compare`，MCP `compare` |
+| 3.5 | 三处入口 | Web：`/api/batch/match`、`/api/rank`、`/api/batch/generate`、`/api/compare`。插件：岗位池视图加复选框 + 批量操作栏。MCP 32 个工具 |
+
+**关键取舍**：
+
+- **不要无脑全生成**。`batch_match` + `rank_jobs` 是便宜的（纯本地计算），
+  `batch_generate` 贵（每个岗位调模型改写措辞）。推荐工作流：先批量匹配 → 看排序 → 挑值得的批量生成。
+- **排序用 adjusted_score 不是原始均分**。10 个 gap 的岗位分数再高，简历也空半页——
+  降权后它会排到「分数低但全对口」的后面。
+- **compare 不重新计算**。只读已有匹配报告和已生成的 PDF，不加任何模型调用。
+  前提是参与对比的岗位都跑过 match。
+
+测试：`tests/batch.py`（60 项），web_smoke +16，vscode_render +7，MCP 28→32 工具。
+全量 775 项全绿。
 
 ---
 

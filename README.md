@@ -395,6 +395,10 @@ WorkBuddy 的配置文件是 `~/.workbuddy-ai/mcp.json`。写完后需要在连�
 | `deck_templates` | 套磁 PPT 模板列表 |
 | `template_list` | 模板列表 |
 | `template_preview` | 模板预览图（PNG，示例档案渲染，不花 API 额度） |
+| `batch_match` | 批量匹配多个岗位，先看哪些值得投 |
+| `rank_jobs` | 从已有匹配报告排序，推荐前 N 个 |
+| `batch_generate` | 批量生成简历（逐个调模型，单个失败不影响其他） |
+| `compare` | 横向对比表：同一份资料投 N 家，分数/命中/gap/页数并排 |
 | `app_list` / `app_detail` / `app_advance` | 投递记录与状态机 |
 | `app_timeline` | 状态流转历史 |
 | `app_note` | 记一笔备注（不改状态，只进时间线） |
@@ -659,7 +663,7 @@ sections:
 | 文本框顺序 | 浮动文本框各自定位，XML 顺序不等于眼睛看到的顺序，标题可能排在内容后面（内容不丢） | 按锚点坐标排序收益有限，暂不做 |
 | xlsx 公式 | 从没被 Excel 打开保存过的文件没有公式缓存，只能读到 `=B2*C2` 而非计算结果 | 需要用户用 Excel 打开存一次 |
 
-后续计划（真实 Office 文件、模板库、批量投递）在 [ROADMAP.md](ROADMAP.md)。
+后续计划（模板库、批量投递已完成；真实资料试跑待用户接入）在 [ROADMAP.md](ROADMAP.md)。
 
 ---
 
@@ -693,13 +697,13 @@ set RESUME_ASSISTANT_MOCK=1
 # MCP 协议握手（initialize / tools/list / tools/call / 错误路径 / stderr 干净度）
 ./.venv/Scripts/python.exe tests/test_mcp.py
 
-# 界面层（71 项：页面能开 / 数据能拿 / 动作能执行 / 越界访问被挡 / 模板预览图 / 前端渲染）
+# 界面层（87 项：页面能开 / 数据能拿 / 动作能执行 / 越界访问被挡 / 模板预览图 / 批量操作接口 / 前端渲染）
 ./.venv/Scripts/python.exe tests/web_smoke.py
 
 # VSCode 扩展（30 项：清单 / 激活 / 视图 HTML / 真实 MCP 调用 / 错误路径）
 node tests/vscode_smoke.js
 
-# VSCode 扩展的 webview（57 项：四视图渲染 / 点击→工具名映射 / 路径转义 / 套磁 PPT / 模板选择与预览图）
+# VSCode 扩展的 webview（64 项：四视图渲染 / 点击→工具名映射 / 路径转义 / 套磁 PPT / 模板选择与预览图 / 批量操作）
 node tests/vscode_render.js
 
 # 模板排版预览（示例档案走真实组稿，五套模板各出一份 PDF + PNG 到 data/output/_preview/）
@@ -710,6 +714,9 @@ node tests/vscode_render.js
 
 # 双栏版式与模板预览 51 项：段落归属 / 整幅置顶 / 窄栏不粘连 / 降级 / 无 key 也能预览
 ./.venv/Scripts/python.exe tests/two_column.py
+
+# 批量操作（batch_match / rank_jobs / batch_generate / compare）60 项
+./.venv/Scripts/python.exe tests/batch.py
 
 # 生成刁难用的测试资料（10 个文件夹：docx/PDF/扫描件/超长/空目录/无数字）
 ./.venv/Scripts/python.exe tests/make_fixtures.py
@@ -786,13 +793,13 @@ node tests/vscode_render.js
 | 边界：损坏的 profile.yaml 给出行号，损坏的证据文件被统计并告警 | 通过 |
 | 边界：8 线程并发写备注不丢，并发建档只产生一条 | 通过 |
 | 边界：单文件超 20MB 直接跳过（数据集/录屏读进来只是噪声） | 通过 |
-| MCP stdio 握手 + 28 个工具 | 通过 |
+| MCP stdio 握手 + 32 个工具 | 通过 |
 | 语义召回：装了走融合、没装退回 BM25、编码器抛异常也不影响匹配 | 通过 |
 | OCR：没装时给出启用方法；装了就按页识别（用假引擎验证过整条链路） | 通过 |
 | 本地界面：页面能开、数据能拿、动作能执行、越界访问被挡、8 并发稳定 | 通过 |
 | 前端渲染：不开浏览器跑内联脚本，有告警 / 有截止 / 有 PDF / OCR 开关两种状态都渲染正确 | 通过 |
 | VSCode 扩展：桩掉 vscode 模块，激活 / 视图 HTML / 真实 MCP 调用 / 错误路径 30 项 | 通过 |
-| 扩展 webview：四视图渲染 + 点击发出去的工具名与参数 + Windows 路径转义 + 套磁 PPT + 模板选择与预览图 57 项 | 通过 |
+| 扩展 webview：四视图渲染 + 点击发出去的工具名与参数 + Windows 路径转义 + 套磁 PPT + 模板选择与预览图 + 批量操作 64 项 | 通过 |
 | 双栏版式：段落按 `column` 归栏、整幅段置顶、窄栏标题与日期不粘连、只有一栏时退回单栏 | 通过 |
 | 模板预览图：示例档案渲染、不花 API 额度、没配 key 也能出图 | 通过 |
 

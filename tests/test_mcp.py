@@ -34,6 +34,7 @@ EXPECTED_TOOLS = {
     "resume_generate", "resume_preview", "resume_rerender",
     "cover_letter_generate", "pitch_generate", "template_list", "template_preview",
     "deck_generate", "deck_templates", "deck_rerender",
+    "batch_match", "rank_jobs", "batch_generate", "compare",
     "app_list", "app_detail", "app_advance", "app_timeline", "app_note",
     "app_board",
     "ui_overview",
@@ -224,6 +225,19 @@ def main() -> int:
 
         resp = cli.call("kb_list_evidence", limit=0)
         check("kb_list_evidence limit=0 不报错", payload_of(resp).get("ok") is True, text_of(resp)[:200])
+
+        # 批量操作：空列表和排序都能正常返回
+        resp = cli.call("batch_match", job_ids=[])
+        body = payload_of(resp)
+        check("batch_match 空列表 ok", body.get("ok") is True and body.get("total") == 0, str(body)[:200])
+
+        resp = cli.call("rank_jobs")
+        body = payload_of(resp)
+        check("rank_jobs ok", body.get("ok") is True and "items" in body, str(body)[:200])
+
+        resp = cli.call("compare", job_ids=[])
+        body = payload_of(resp)
+        check("compare 空列表 ok", body.get("ok") is True and body.get("total") == 0, str(body)[:200])
 
         print("\n[4] 错误路径：非法参数必须结构化失败")
         cases: list[tuple[str, dict, str]] = [

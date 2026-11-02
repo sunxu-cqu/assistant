@@ -25,6 +25,7 @@ const DEFAULT_TIMEOUT = 60000;
 const SLOW_TOOLS = new Set([
   "kb_build", "job_match", "resume_generate", "resume_preview",
   "resume_rerender", "cover_letter_generate", "pitch_generate", "job_add", "deck_generate",
+  "batch_match", "batch_generate",
 ]);
 const SLOW_TIMEOUT = 300000;
 

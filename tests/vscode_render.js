@@ -138,6 +138,15 @@ function makeInstance(mode, data) {
           let payload = { ok: true };
           if (m.tool === "ui_overview") payload = data;
           else if (m.tool === "deck_generate") payload = DECK_REPLY;
+          else if (m.tool === "rank_jobs") payload = {
+            ok: true, total: 2,
+            items: [
+              { job_id: "job_1", title: "推荐算法实习生", org: "某互联网公司", kind: "internship",
+                avg_score: 78.5, adjusted_score: 75.5, hits_count: 6, gaps_count: 2, blocked: false, deadline: "" },
+              { job_id: "job_2", title: "推荐系统冷启动", org: "", kind: "baoyan",
+                avg_score: 72.0, adjusted_score: 69.0, hits_count: 4, gaps_count: 3, blocked: false, deadline: "" },
+            ],
+          };
           if (onMessage) onMessage({ data: { type: "result", id: m.id, ok: true, data: payload } });
         }, 5);
       }
@@ -163,7 +172,7 @@ function makeInstance(mode, data) {
   const win = { addEventListener(type, fn) { if (type === "message") onMessage = fn; } };
   const factory = new Function(
     "document", "window", "acquireVsCodeApi", "setTimeout",
-    SRC + "\n;return {refresh, render, state, viewBoard, viewJobs, viewKb, viewSystem, doGen, doMatch, doLetter, buildKb, openDeckModal, submitDeck, openGenModal, submitGen, loadTplPreview, setView};"
+    SRC + "\n;return {refresh, render, state, viewBoard, viewJobs, viewKb, viewSystem, doGen, doMatch, doLetter, buildKb, openDeckModal, submitDeck, openGenModal, submitGen, loadTplPreview, setView, showRank, batchMatch, batchGen, showCompare};"
   );
   const fns = factory(doc, win, () => api, (fn) => fn());
   return { fns, doc, nodes, sent };
@@ -338,6 +347,25 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const gen2 = calls().slice(m6).filter((x) => x.tool === "resume_generate")[0];
   check("选了哪套就发哪套", gen2 && gen2.args.template === "gov_soe", JSON.stringify(gen2 && gen2.args));
   check("带上 job_id", gen2 && gen2.args.job_id === "job_1", JSON.stringify(gen2 && gen2.args));
+
+  console.log("\n[9] 批量操作");
+  // 岗位池视图应该有复选框和批量操作按钮
+  fns.setView("jobs");
+  const jobsHtml = panel.nodes["#app"].innerHTML;
+  check("岗位池有复选框", jobsHtml.includes('class="job-cb"'), "没有 job-cb");
+  check("有批量匹配按钮", jobsHtml.includes("batchMatch()"), "没有 batchMatch");
+  check("有排序推荐按钮", jobsHtml.includes("showRank()"), "没有 showRank");
+  check("有批量生成按钮", jobsHtml.includes("batchGen()"), "没有 batchGen");
+  check("有横向对比按钮", jobsHtml.includes("showCompare()"), "没有 showCompare");
+
+  // 排序推荐：应该调 rank_jobs
+  const m7 = calls().length;
+  await fns.showRank();
+  await sleep(30);
+  const rankCall = calls().slice(m7).filter((x) => x.tool === "rank_jobs")[0];
+  check("showRank → rank_jobs", !!rankCall, JSON.stringify(calls().slice(m7).map((x) => x.tool)));
+  check("rank 结果弹窗有标题", panel.nodes["#modalBody"].innerHTML.includes("排序推荐") || panel.nodes["#modalTitle"].textContent.includes("排序"),
+    panel.nodes["#modalTitle"].textContent + panel.nodes["#modalBody"].innerHTML.slice(0, 80));
 
   console.log("\n" + "=".repeat(46));
   console.log(`通过 ${PASS} 项，失败 ${FAILS.length} 项`);

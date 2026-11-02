@@ -849,3 +849,199 @@ def all_deck_templates() -> list[dict[str, str]]:
     from .compose.deck import list_deck_templates
 
     return list_deck_templates()
+
+
+# ----------------------------------------------------------------- 批量操作
+
+def batch_match(job_ids: list[str], refresh: bool = False) -> dict[str, Any]:
+    """对多个岗位批量做匹配。
+
+    逐个调 run_match，单个失败不影响其他。纯本地计算（BM25 + 规则 + 模型精排），
+    不生成简历、不调渲染。
+
+    为什么要批量匹配：投 10 家公司之前先把匹配报告都跑出来，
+    看哪些岗位的命中数和分数明显高，哪些 gap 太多不值得投——
+    这一步比逐个 match + gen 省得多，因为 gen 每次要调模型改写措辞。
+    """
+    results: list[dict[str, Any]] = []
+    ok_count = 0
+    for jid in job_ids:
+        res = run_match(jid, refresh=refresh)
+        if res.get("ok"):
+            ok_count += 1
+            report = res["report"]
+            results.append({
+                "job_id": jid,
+                "ok": True,
+                "cached": res.get("cached", False),
+                "blocked": res.get("blocked", False),
+                "hits_count": len(report.get("hits", [])),
+                "top_score": report["hits"][0]["score"] if report.get("hits") else 0,
+                "gaps": report.get("gaps", []),
+                "gaps_count": len(report.get("gaps", [])),
+            })
+        else:
+            results.append({
+                "job_id": jid,
+                "ok": False,
+                "error": res.get("error", "未知错误"),
+            })
+    return {
+        "ok": True,
+        "total": len(job_ids),
+        "succeeded": ok_count,
+        "failed": len(job_ids) - ok_count,
+        "results": results,
+    }
+
+
+def rank_jobs(job_ids: list[str] | None = None, top_n: int = 10) -> dict[str, Any]:
+    """从已有匹配报告里排序，给出值得投的前 N 个岗位。
+
+    排序逻辑：取每个岗位 top hits 的均分作为「对口度」，降序排列。
+    gap 太多（>5）的岗位降权：缺口说明知识库里没有对应证据，
+    写出来的简历会空——分数再高，投出去也是半成品。
+
+    job_ids 留空则取全部已有匹配报告。没有匹配报告的岗位不参与排序
+    （不是「分数为 0」，是「还不知道能不能投」——混在一起会误导）。
+    """
+    from .store import db as _db
+
+    if job_ids is None:
+        # 没传 job_ids 就查全部有匹配报告的
+        all_jobs = _db.list_jobs()
+        job_ids = [j.id for j in all_jobs]
+
+    items: list[dict[str, Any]] = []
+    for jid in job_ids:
+        report = _db.get_match(jid)
+        if report is None:
+            continue  # 没匹配报告的跳过
+        job = _db.get_job(jid)
+        if job is None:
+            continue
+        hits = report.hits[:8]
+        avg = sum(h.score for h in hits) / len(hits) if hits else 0
+        gaps_penalty = max(0, len(report.gaps) - 5) * 3
+        score = max(0, avg - gaps_penalty)
+        items.append({
+            "job_id": jid,
+            "title": job.title,
+            "org": job.org or job.mentor or "",
+            "kind": job.kind.value,
+            "avg_score": round(avg, 1),
+            "adjusted_score": round(score, 1),
+            "hits_count": len(report.hits),
+            "gaps_count": len(report.gaps),
+            "blocked": report.blocked,
+            "deadline": job.deadline or "",
+        })
+
+    items.sort(key=lambda x: x["adjusted_score"], reverse=True)
+    items = items[:top_n]
+    return {
+        "ok": True,
+        "total": len(items),
+        "items": items,
+        "hint": "adjusted_score = top8 命中均分 - max(0, gap数-5)×3；blocked=true 的岗位不建议投" if items else None,
+    }
+
+
+def batch_generate(job_ids: list[str], template_key: str = "single_column") -> dict[str, Any]:
+    """对多个岗位批量生成简历。
+
+    逐个调 generate_resume，单个失败不影响其他。每个岗位各生成一份 PDF，
+    产物在 data/output/<app_id>/ 下。
+
+    跟 batch_match 的区别：这一步会调模型改写措辞、调渲染器出 PDF，
+    每个岗位约 30~60 秒。建议先 batch_match 看哪些值得投，再 batch_generate。
+    """
+    results: list[dict[str, Any]] = []
+    ok_count = 0
+    for jid in job_ids:
+        res = generate_resume(jid, template_key=template_key)
+        if res.get("ok"):
+            ok_count += 1
+            results.append({
+                "job_id": jid,
+                "ok": True,
+                "application_id": res.get("application_id", ""),
+                "pdf_path": res.get("pdf_path"),
+                "pages": res.get("pages"),
+                "lint_errors": res.get("lint", {}).get("stats", {}).get("errors", 0),
+                "lint_warnings": res.get("lint", {}).get("stats", {}).get("warnings", 0),
+            })
+        else:
+            results.append({
+                "job_id": jid,
+                "ok": False,
+                "stage": res.get("stage", ""),
+                "error": res.get("error", "未知错误"),
+            })
+    return {
+        "ok": True,
+        "total": len(job_ids),
+        "succeeded": ok_count,
+        "failed": len(job_ids) - ok_count,
+        "template": template_key,
+        "results": results,
+    }
+
+
+def compare(job_ids: list[str]) -> dict[str, Any]:
+    """同一份资料投 N 家，横向对比表。
+
+    把多个岗位的匹配报告、生成结果并排展示：分数、命中数、gap、页数、校验错误。
+    用来回答「我到底该投哪家」——单看一个岗位的分数看不出优劣，
+    并排比才能发现「A 家分数高但 gap 多、B 家分数低但全对口」。
+
+    前提：这些岗位都跑过 match（有匹配报告）。
+    没跑过的会在 status 里标 "no_match"。
+    跑过 match 但没 gen 过的只给分数和 gap，不给页数和校验。
+    """
+    from .store import db as _db
+
+    rows: list[dict[str, Any]] = []
+    for jid in job_ids:
+        job = _db.get_job(jid)
+        if job is None:
+            rows.append({"job_id": jid, "status": "job_not_found"})
+            continue
+        report = _db.get_match(jid)
+        if report is None:
+            rows.append({
+                "job_id": jid,
+                "title": job.title,
+                "org": job.org or job.mentor or "",
+                "status": "no_match",
+            })
+            continue
+        app = _db.find_application_by_job(jid)
+        row: dict[str, Any] = {
+            "job_id": jid,
+            "title": job.title,
+            "org": job.org or job.mentor or "",
+            "kind": job.kind.value,
+            "status": "matched",
+            "top_score": report.hits[0].score if report.hits else 0,
+            "hits_count": len(report.hits),
+            "gaps": report.gaps,
+            "gaps_count": len(report.gaps),
+            "blocked": report.blocked,
+            "deadline": job.deadline or "",
+        }
+        if app and app.snapshot and app.snapshot.pdf_path:
+            from .render.typst import pdf_pages as _pp
+            from pathlib import Path as _P
+            row["status"] = "generated"
+            row["application_id"] = app.id
+            row["pdf_path"] = app.snapshot.pdf_path
+            row["pages"] = _pp(_P(app.snapshot.pdf_path)) if _P(app.snapshot.pdf_path).exists() else None
+            # 校验结果不存——gen 时跑过但没持久化。这里只能给页数。
+        rows.append(row)
+    return {
+        "ok": True,
+        "total": len(job_ids),
+        "rows": rows,
+        "hint": "status: matched=只跑了匹配 / generated=已生成简历 / no_match=还没匹配" if rows else None,
+    }

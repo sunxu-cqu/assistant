@@ -460,6 +460,113 @@ def deck_templates_cmd() -> None:
         typer.echo(f"{t['key']:18s} {t['name']}  —  {t['description']}")
 
 
+# ---------------------------------------------------------------- 批量操作
+
+@app.command("batch-match")
+def batch_match_cmd(
+    job_ids: list[str] = typer.Argument(..., help="岗位 ID 列表（空格分隔）"),
+    refresh: bool = typer.Option(False, "--refresh", help="强制重新匹配，不用缓存"),
+) -> None:
+    """对多个岗位批量匹配。先看哪些值得投，再决定 gen 哪些。"""
+    if not job_ids:
+        typer.echo("请至少提供一个岗位 ID", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"批量匹配 {len(job_ids)} 个岗位…", err=True)
+    res = pipeline.batch_match(job_ids, refresh=refresh)
+    for r in res["results"]:
+        if r["ok"]:
+            tag = "缓存" if r.get("cached") else "新算"
+            blocked = " ⚠硬性不符" if r.get("blocked") else ""
+            typer.echo(
+                f"  [{r['job_id']}] {tag}  命中{r['hits_count']}  最高{r['top_score']:.1f}"
+                f"  gap{r['gaps_count']}{blocked}"
+            )
+        else:
+            typer.echo(f"  [{r['job_id']}] 失败：{r['error']}")
+    typer.echo(f"\n完成 {res['succeeded']}/{res['total']}")
+
+
+@app.command("rank")
+def rank_cmd(
+    top_n: int = typer.Option(10, "--top", "-n", help="显示前 N 个"),
+    kind: str = typer.Option("", "--kind", "-k", help="只看实习/保研"),
+) -> None:
+    """从已有匹配报告里排序，推荐值得投的前 N 个。"""
+    job_ids = None
+    if kind:
+        items = pipeline.list_jobs(kind)
+        job_ids = [j["id"] for j in items]
+    res = pipeline.rank_jobs(job_ids=job_ids, top_n=top_n)
+    if not res["items"]:
+        typer.echo("还没有匹配报告。先对岗位跑 match 或 batch-match。")
+        return
+    typer.echo(f"{'岗位':<28}{'单位':<16}{'均分':>6}{'调整':>6}{'命中':>5}{'gap':>5}  状态")
+    typer.echo("─" * 80)
+    for it in res["items"]:
+        blocked = " ⚠" if it["blocked"] else ""
+        typer.echo(
+            f"{it['title'][:26]:<28}{it['org'][:14]:<16}"
+            f"{it['avg_score']:>6.1f}{it['adjusted_score']:>6.1f}"
+            f"{it['hits_count']:>5}{it['gaps_count']:>5}{blocked}"
+        )
+    if res.get("hint"):
+        typer.echo(f"\n{res['hint']}")
+
+
+@app.command("batch-gen")
+def batch_gen_cmd(
+    job_ids: list[str] = typer.Argument(..., help="岗位 ID 列表（空格分隔）"),
+    template: str = typer.Option("single_column", "--template", "-T"),
+) -> None:
+    """对多个岗位批量生成简历。每个约 30~60 秒。"""
+    if not job_ids:
+        typer.echo("请至少提供一个岗位 ID", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"批量生成 {len(job_ids)} 份简历（模板 {template}）…", err=True)
+    res = pipeline.batch_generate(job_ids, template_key=template)
+    for r in res["results"]:
+        if r["ok"]:
+            pages = f" {r['pages']}页" if r.get("pages") else ""
+            errs = f" 校验{r['lint_errors']}错" if r.get("lint_errors") else ""
+            typer.echo(f"  [{r['job_id']}] ✓{pages}{errs}  {r.get('pdf_path', '')}")
+        else:
+            typer.echo(f"  [{r['job_id']}] 失败（{r.get('stage', '')}）：{r.get('error', '')}")
+    typer.echo(f"\n完成 {res['succeeded']}/{res['total']}")
+
+
+@app.command("compare")
+def compare_cmd(
+    job_ids: list[str] = typer.Argument(..., help="要对比的岗位 ID 列表"),
+) -> None:
+    """横向对比多个岗位的匹配与生成情况。"""
+    if not job_ids:
+        typer.echo("请至少提供两个岗位 ID 来对比", err=True)
+        raise typer.Exit(1)
+    res = pipeline.compare(job_ids)
+    if not res["rows"]:
+        typer.echo("没有可对比的数据")
+        return
+    typer.echo(f"{'岗位':<28}{'单位':<14}{'分数':>6}{'命中':>5}{'gap':>5}{'页数':>5}  状态")
+    typer.echo("─" * 78)
+    for row in res["rows"]:
+        status = row.get("status", "")
+        if status == "job_not_found":
+            typer.echo(f"  [{row['job_id']}] 岗位不存在")
+            continue
+        if status == "no_match":
+            typer.echo(f"{row['title'][:26]:<28}{row.get('org','')[:12]:<14}{'-':>6}{'-':>5}{'-':>5}{'-':>5}  未匹配")
+            continue
+        pages = str(row.get("pages", "")) if row.get("pages") else "-"
+        blocked = " ⚠" if row.get("blocked") else ""
+        typer.echo(
+            f"{row['title'][:26]:<28}{row['org'][:12]:<14}"
+            f"{row.get('top_score', 0):>6.1f}{row.get('hits_count', 0):>5}"
+            f"{row.get('gaps_count', 0):>5}{pages:>5}{blocked}"
+        )
+    if res.get("hint"):
+        typer.echo(f"\n{res['hint']}")
+
+
 # ---------------------------------------------------------------- 投递状态机
 
 @app_app.command("list")
