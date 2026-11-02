@@ -41,3 +41,6 @@ tests/sandbox/*
 
 # 扩展打包产物（可重建：npm run package）
 *.vsix
+
+# 预览产物里复制进来的证件照（源文件在 tests/fixtures/）
+data/output/_preview/*/_photo.*

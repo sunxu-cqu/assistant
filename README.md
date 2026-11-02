@@ -554,16 +554,40 @@ VSCode 插件里在保研岗位卡片上点「套磁 PPT」即可，会先让你
 
 `resume_assistant/render/templates/*.yaml` 定义版式与槽位（section 顺序、条目上限、每条 bullet 数）。
 
-- `single_column` — ATS 友好，适合实习网申
-- `academic` — 前置研究兴趣与科研经历，适合保研套磁
+| 模板 | 适合 | 特点 |
+|---|---|---|
+| `single_column` | 实习网申 | ATS 友好，单栏无表格无图标 |
+| `academic` | 保研套磁 | 前置研究兴趣与科研经历 |
+| `gov_soe` | 国企 / 事业单位 | 照片位、政治面貌与籍贯、荣誉前置、家庭成员、配色克制 |
+| `research` | 保研 / 直博 / 科研岗 | 论文与专利单独成段，教育段前置 GPA 与排名、带实验室与导师 |
 
-加新模板只需复制一个 yaml 改字段，不用动代码。内容层（IR）与版式层完全解耦，同一份内容可渲染成多套版式。
+**加单栏模板只需复制一个 yaml 改字段，不用动代码**——内容层（IR）与版式层解耦，同一份内容能渲染成多套版式。
+（双栏不在此列，见 [ROADMAP](ROADMAP.md) 2B。）
 
-`include_kinds` 控制该 section 接收哪些类型的证据：
+段序、`include_kinds`、`variant` 都在 yaml 里，取值为固定集合：
+
+```yaml
+page:
+  photo: true                       # 画证件照（profile.photo 指向的文件不存在时整块不画）
+  header_fields: [phone, email]     # 页眉显示哪些字段；不写则 性别/出生/政治面貌/电话/邮箱/城市 全上
+  accent: "#2f3b46"                 # 主题色
+sections:
+  - type: education                 # 段类型见下
+    variant: research               # 科研口径：成绩排到时间前面 + 实验室/导师一行
+```
+
+可用的段类型：`basic_info` / `education` / `research_interest` / `publications` /
+`experience` / `projects` / `skills` / `honors` / `family`。
+
+`include_kinds` 控制该 section 接收哪些类型的证据（证据 kind：`project` / `intern` /
+`research` / `course` / `award` / `activity` / `paper` / `patent`）：
 
 - `single_column` 的 projects **不设** `include_kinds`，所有经历统一进这一段（实习模板不区分科研与项目）
 - `academic` 的 experience 严格限定 `[intern, research]`，**没有对应经历时整段不出现**，而不是把课程项目塞进去冒充科研经历
-- `academic` 的 projects 接收 `[project, course, award, activity]`
+- `gov_soe` / `research` 的 projects 显式排除 `paper` / `patent`，让它们只出现在「论文与专利」段——混在项目里会被读成「做过的一个项目」，看不出是发表过的成果
+
+**没填就不出**：`basic_info` 需要籍贯/身高体重等字段，`family` 需要 `profile.family`，
+`publications` 需要 `kind: paper|patent` 的证据。缺哪一项，对应段落整段消失，不会留一个空标题。
 
 ### 字号自适应
 
@@ -590,6 +614,7 @@ VSCode 插件里在保研岗位卡片上点「套磁 PPT」即可，会先让你
 | 抓取能力弱 | JS 渲染页取不到正文，会引导改手动粘贴 | 视需要接 Playwright |
 | 界面 | 有 VSCode 扩展（活动栏 + 四栏看板）和一个本地网页兜底；不是 JetBrains 插件 | 需要的话再包一层 |
 | 单语言 | 只支持中文 | — |
+| 只有单栏 | 渲染器是顺序流（一路 `lines.append`），没有布局抽象，双栏要重构 | ROADMAP 2B |
 | 文本框顺序 | 浮动文本框各自定位，XML 顺序不等于眼睛看到的顺序，标题可能排在内容后面（内容不丢） | 按锚点坐标排序收益有限，暂不做 |
 | xlsx 公式 | 从没被 Excel 打开保存过的文件没有公式缓存，只能读到 `=B2*C2` 而非计算结果 | 需要用户用 Excel 打开存一次 |
 
@@ -607,7 +632,7 @@ VSCode 插件里在保研岗位卡片上点「套磁 PPT」即可，会先让你
 
 ## 自测
 
-七个脚本，只有最后三个消耗 API 额度：
+下面这些脚本只有最后三个（e2e_*）消耗 API 额度，其余全程 mock：
 
 ```bash
 # 全链路冒烟（97 项断言：资料接入→知识库→匹配→组稿→校验→渲染→状态机→校对→看板→开场白）
@@ -627,17 +652,20 @@ set RESUME_ASSISTANT_MOCK=1
 # MCP 协议握手（initialize / tools/list / tools/call / 错误路径 / stderr 干净度）
 ./.venv/Scripts/python.exe tests/test_mcp.py
 
-# 界面层（页面能开 / 数据能拿 / 动作能执行 / 越界访问被挡 / 前端渲染 62 项）
+# 界面层（页面能开 / 数据能拿 / 动作能执行 / 越界访问被挡 / 前端渲染 64 项）
 ./.venv/Scripts/python.exe tests/web_smoke.py
 
 # VSCode 扩展（30 项：清单 / 激活 / 视图 HTML / 真实 MCP 调用 / 错误路径）
 node tests/vscode_smoke.js
 
-# VSCode 扩展的 webview（46 项：四视图渲染 / 点击→工具名映射 / 路径转义 / 套磁 PPT）
+# VSCode 扩展的 webview（52 项：四视图渲染 / 点击→工具名映射 / 路径转义 / 套磁 PPT / 模板选择）
 node tests/vscode_render.js
 
-# 模板排版预览（假数据渲染两套模板，产出 data/output/_preview/*.pdf）
+# 模板排版预览（假档案 + 假证据走真实组稿，四套模板各出一份 PDF 到 data/output/_preview/）
 ./.venv/Scripts/python.exe tests/preview_template.py
+
+# 两套新模板（体制内/国企版、科研·论文导向）48 项：段序 / 字段口径 / 照片位 / 论文不串段
+./.venv/Scripts/python.exe tests/templates_2a.py
 
 # 生成刁难用的测试资料（10 个文件夹：docx/PDF/扫描件/超长/空目录/无数字）
 ./.venv/Scripts/python.exe tests/make_fixtures.py
@@ -674,6 +702,10 @@ node tests/vscode_render.js
 | 比例数字（8.7% / 3 倍）不论大小都要出处；「3 个项目」这类计数不误报 | 通过 |
 | 指标单位不重复（value 已带 % 时不再拼成 9%%） | 通过 |
 | 备份文件夹抽出的孪生证据在简历里只出现一次 | 通过 |
+| 体制内/国企版：照片位、政治面貌与籍贯、荣誉前置、家庭成员、配色克制 | 通过 |
+| 科研型：论文与专利单独成段、教育段前置 GPA 与排名、实验室与导师 | 通过 |
+| 论文/专利不被混进「项目经历」段（include_kinds 显式排除） | 通过 |
+| 照片文件不存在时不留空框、不拖垮整份简历 | 通过 |
 | 单文件字符上限：6MB 训练日志挤不掉项目里的说明文件 | 通过 |
 | 代码文件读「结构摘要」（注释 / docstring / 定义名 / 依赖），不整篇吞 | 通过 |
 | 数据文件识别：分词结果 / IDF 表 / 词典整份跳过，不污染数字池 | 通过 |
@@ -716,7 +748,7 @@ node tests/vscode_render.js
 | 本地界面：页面能开、数据能拿、动作能执行、越界访问被挡、8 并发稳定 | 通过 |
 | 前端渲染：不开浏览器跑内联脚本，有告警 / 有截止 / 有 PDF / OCR 开关两种状态都渲染正确 | 通过 |
 | VSCode 扩展：桩掉 vscode 模块，激活 / 视图 HTML / 真实 MCP 调用 / 错误路径 30 项 | 通过 |
-| 扩展 webview：四视图渲染 + 点击发出去的工具名与参数 + Windows 路径转义 + 套磁 PPT 46 项 | 通过 |
+| 扩展 webview：四视图渲染 + 点击发出去的工具名与参数 + Windows 路径转义 + 套磁 PPT + 模板选择 52 项 | 通过 |
 
 真实 API 端到端跑通 5 个岗位（3 实习 + 2 保研），简历全部 0 错误生成，2 封套磁信 0 编造风险。
 另有一组「像真人资料」的 8 个文件夹（多文件项目 / 备份文件夹 / docx 表格 / 6MB 日志 / 25MB csv / 扫描件 / GBK 笔记）跑通全流程：8 条证据，实习 1 页、保研 1 页，均 0 错误。

@@ -181,24 +181,119 @@ def _collapse_same_project(evs: list[Evidence]) -> list[Evidence]:
     return [e for e in evs if e.id in picked]
 
 
-def _edu_section(profile: Profile, spec_title: str) -> IRSection | None:
+def _edu_section(profile: Profile, spec_title: str, variant: str = "") -> IRSection | None:
+    """教育背景段。
+
+    variant="research" 时换成科研口径：成绩排在时间前面（导师先看 GPA 和排名），
+    并补一行「实验室 / 导师」。同一套字段在国企版里不写这两项——
+    投国企的简历上写「导师：王教授」只会占地方。
+    """
     if not profile.education:
         return None
+    research = variant == "research"
     entries: list[IREntry] = []
     for edu in profile.education:
-        meta_parts = [_fmt_period(edu.period)] if edu.period else []
+        score: list[str] = []
         if edu.gpa:
-            meta_parts.append(f"GPA {edu.gpa}")
+            score.append(f"GPA {edu.gpa}")
         if edu.gpa_rank:
-            meta_parts.append(f"排名 {edu.gpa_rank}")
+            rank = f"排名 {edu.gpa_rank}"
+            if edu.gpa_rank_pct:
+                rank += f"（前 {edu.gpa_rank_pct}）"
+            score.append(rank)
+        period = [_fmt_period(edu.period)] if edu.period else []
+        meta_parts = score + period if research else period + score
         heading = " | ".join(x for x in [edu.school, edu.major, edu.degree] if x)
         bullets: list[Bullet] = []
+        if research and (edu.lab or edu.advisor):
+            bits = []
+            if edu.lab:
+                bits.append(f"实验室：{edu.lab}")
+            if edu.advisor:
+                bits.append(f"导师：{edu.advisor}")
+            bullets.append(Bullet(text="　".join(bits), evidence_id="profile", metrics=[]))
         if edu.courses:
             bullets.append(Bullet(text="核心课程：" + "、".join(edu.courses[:8]), evidence_id="profile", metrics=[]))
         # 荣誉不写在这里：模板里有独立的「荣誉奖项」段（_honors_section），
         # 两处都写的话，同一句「国家奖学金（2024）」会在简历上出现两次。
         entries.append(IREntry(heading=heading, meta=" | ".join(meta_parts), bullets=bullets))
     return IRSection(type="education", title=spec_title, entries=entries)
+
+
+def _basic_info_section(profile: Profile, spec_title: str) -> IRSection | None:
+    """基本信息段：国企/事业单位应聘登记表的固定栏目。
+
+    这里只放**页眉没显示**的字段。页眉已经写了性别、出生、政治面貌，这一段再写一遍
+    就是同一份简历上重复两行——「政治面貌：中共党员」出现两次，审表的人会以为你抄漏了。
+    页眉显示哪些字段由模板的 page.header_fields 决定。
+    """
+    rows: list[str] = []
+    if profile.gender:
+        rows.append(f"性别：{profile.gender}")
+    if profile.birth:
+        rows.append(f"出生年月：{profile.birth}")
+    if profile.political:
+        rows.append(f"政治面貌：{profile.political}")
+    if profile.native_place:
+        rows.append(f"籍贯：{profile.native_place}")
+    body: list[str] = []
+    if profile.height:
+        body.append(f"身高 {profile.height}")
+    if profile.weight:
+        body.append(f"体重 {profile.weight}")
+    if body:
+        rows.append("／".join(body))
+    if profile.health:
+        rows.append(f"健康状况：{profile.health}")
+    if not rows:
+        return None
+    # 两行放得下就别占四行：登记表是给人扫的，不是给人读的
+    lines = ["　　".join(rows[i : i + 2]) for i in range(0, len(rows), 2)]
+    return IRSection(
+        type="basic_info",
+        title=spec_title,
+        entries=[IREntry(heading="", meta="", bullets=[Bullet(text=t, evidence_id="profile", metrics=[]) for t in lines])],
+    )
+
+
+def _family_section(profile: Profile, spec_title: str) -> IRSection | None:
+    if not profile.family:
+        return None
+    rows: list[str] = []
+    for m in profile.family:
+        head = " ".join(x for x in [m.relation, m.name] if x).strip()
+        tail = "｜".join(x for x in [m.workplace, m.political] if x)
+        text = "｜".join(x for x in [head, tail] if x)
+        if text:
+            rows.append(text)
+    if not rows:
+        return None
+    return IRSection(
+        type="family",
+        title=spec_title,
+        entries=[IREntry(heading="", meta="", bullets=[Bullet(text=t, evidence_id="profile", metrics=[]) for t in rows])],
+    )
+
+
+def _pub_section(evs: list[Evidence], spec_title: str, max_entries: int) -> IRSection | None:
+    """论文与专利单独成段。
+
+    一条一行，不写 bullet：论文条目本来就是「标题 + 期刊/会议 + 作者位次 + 时间」，
+    拆成「做了什么」的动词短句反而别扭。近期在前——导师看论文列表只看头两条。
+    """
+    items = [e for e in evs if e.kind in ("paper", "patent")]
+    if not items:
+        return None
+    items.sort(key=lambda e: (e.period or "", e.title), reverse=True)
+    entries = [
+        IREntry(
+            heading=e.title,
+            meta=" | ".join(x for x in [e.org, e.role, _fmt_period(e.period)] if x),
+            bullets=[],
+        )
+        for e in items[:max_entries]
+    ]
+    return IRSection(type="publications", title=spec_title, entries=entries)
 
 
 def _skills_section(profile: Profile, spec_title: str) -> IRSection | None:
@@ -362,11 +457,22 @@ def compose(
     used_ids: set[str] = set()
     for spec in template.sections:
         if spec.type == "education":
-            sec = _edu_section(profile, spec.title)
+            # variant: research 让科研型模板换成科研口径（成绩前置 + 实验室/导师）
+            sec = _edu_section(profile, spec.title, variant=spec.variant)
         elif spec.type == "skills":
             sec = _skills_section(profile, spec.title)
         elif spec.type == "honors":
             sec = _honors_section(profile, spec.title)
+        elif spec.type == "basic_info":
+            sec = _basic_info_section(profile, spec.title)
+        elif spec.type == "family":
+            sec = _family_section(profile, spec.title)
+        elif spec.type == "publications":
+            pool = [by_id[h.evidence_id] for h in report.hits if h.evidence_id in by_id]
+            sec = _pub_section(_dedupe_evidence(pool), spec.title, spec.max_entries)
+            if sec:
+                # 论文已经在「论文与专利」段占过位置了，项目段不该再出现一次
+                used_ids |= {e.id for e in pool if e.kind in ("paper", "patent")}
         elif spec.type == "research_interest":
             top_evs = [by_id[h.evidence_id] for h in report.hits if h.evidence_id in by_id][:3]
             sec = _interest_section(profile, job, spec.title, top_evs, llm)
@@ -423,5 +529,6 @@ def compose(
         "gender": profile.gender,
         "birth": profile.birth,
         "political": profile.political,
+        "photo": profile.photo,
     }
     return ResumeIR(job_id=job.id, template=template.key, contact={k: v for k, v in contact.items() if v}, sections=sections)

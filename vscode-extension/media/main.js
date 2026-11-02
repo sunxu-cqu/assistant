@@ -124,7 +124,7 @@ function renderSidebar(d) {
     if (it.pdf) tags.push(`<span class="chip ok">PDF</span>`);
 
     const alert = (it.alerts || []).find((a) => a.level === "error" || a.level === "warn");
-    return `<div class="side-item ${worst}" onclick="quickGen(${arg(it.job_id)})" title="点击生成简历">
+    return `<div class="side-item ${worst}" onclick="quickGen(${arg(it.job_id)}, ${arg(it.kind)})" title="点击生成简历">
       <div class="t">${esc(it.title)}</div>
       <div class="s">${esc(it.org || it.mentor || "—")}</div>
       ${tags.length ? `<div class="tags">${tags.join("")}</div>` : ""}
@@ -261,7 +261,7 @@ function cardHtml(it) {
     ${alerts ? `<div class="alerts">${alerts}</div>` : ""}
     <div class="next">下一步 · <b>${esc(it.next || "—")}</b></div>
     <div class="card-actions">
-      ${canGen ? `<button class="btn btn-ghost btn-tiny" onclick="doGen(${arg(it.job_id)})">生成简历</button>` : ""}
+      ${canGen ? `<button class="btn btn-ghost btn-tiny" onclick="openGenModal(${arg(it.job_id)}, ${arg(it.kind)})">生成简历</button>` : ""}
       ${it.kind === "baoyan" ? `<button class="btn btn-ghost btn-tiny" onclick="openDeckModal(${arg(it.job_id)})">套磁 PPT</button>` : ""}
       ${canAdvance ? `<button class="btn btn-ghost btn-tiny" onclick="openAdvance(${arg(it.app_id)})">推进状态</button>` : ""}
       <button class="btn btn-ghost btn-tiny" onclick="openNote(${arg(it.app_id)})">记一笔</button>
@@ -281,7 +281,7 @@ function viewJobs(d) {
       </div>
       <div class="r">
         <button class="btn btn-ghost btn-tiny" onclick="doMatch(${arg(j.id)})">匹配</button>
-        <button class="btn btn-ghost btn-tiny" onclick="doGen(${arg(j.id)})">生成简历</button>
+        <button class="btn btn-ghost btn-tiny" onclick="openGenModal(${arg(j.id)}, ${arg(j.kind)})">生成简历</button>
         <button class="btn btn-ghost btn-tiny" onclick="doLetter(${arg(j.id)}, ${arg(j.kind)})">${j.kind === "baoyan" ? "套磁信" : "开场白"}</button>
         ${j.kind === "baoyan" ? `<button class="btn btn-ghost btn-tiny" onclick="openDeckModal(${arg(j.id)})">套磁 PPT</button>` : ""}
       </div>
@@ -411,6 +411,28 @@ async function doGen(jobId, template) {
   });
 }
 
+/* 生成前先选模板。默认值按岗位类型给：保研给学术版，实习给单栏版，
+   国企/科研型自己挑——组织性质没法从 JD 里可靠推断，猜错比让人选一下更烦。 */
+function openGenModal(jobId, kind) {
+  const d = state.data || {};
+  const prefer = kind === "baoyan" ? "academic" : "single_column";
+  const opts = (d.templates || [])
+    .map((t) => `<option value="${esc(t.key)}"${t.key === prefer ? " selected" : ""}>${esc(t.name || t.key)} · ${esc(t.description || "")}</option>`)
+    .join("");
+  openModal("生成简历", `
+    <div class="field"><label>模板</label><select id="genTpl">${opts}</select></div>
+    <div class="hint">同一份内容能渲染成不同版式：投互联网用单栏，联系导师用学术版，
+      国企/事业单位用体制内版（带照片位与政治面貌），保研直博或科研岗用科研版（论文与专利单独成段）。
+      选错模板不会丢内容，换个模板重新生成即可。</div>
+    <button class="btn btn-primary" onclick="submitGen(${arg(jobId)})">生成</button>`);
+}
+
+async function submitGen(jobId) {
+  const tpl = $("#genTpl").value;
+  closeModal();
+  await doGen(jobId, tpl);
+}
+
 async function doLetter(jobId, kind) {
   await act(async () => {
     const tool = kind === "baoyan" ? "cover_letter_generate" : "pitch_generate";
@@ -478,9 +500,9 @@ async function openBoardHtml() {
   });
 }
 
-// 侧栏点一下卡片：直接生成简历，省得先开面板
-async function quickGen(jobId) {
-  await doGen(jobId);
+// 侧栏点一下卡片：直接弹模板选择，省得先开面板
+function quickGen(jobId, kind) {
+  openGenModal(jobId, kind);
 }
 
 /* ---------------------------------------------------------------- 弹层 */

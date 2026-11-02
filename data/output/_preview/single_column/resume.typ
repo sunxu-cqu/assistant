@@ -10,19 +10,9 @@
 #v(2pt)
 #text(size: 13.8pt, weight: "bold", fill: rgb("#1f4e79"))[教育背景]
 #v(-6pt)#line(length: 100%, stroke: 0.7pt + rgb("#1f4e79"))#v(3pt)
-#grid(columns: (1fr, auto), [#text(weight: "bold")[某某大学 | 计算机科学与技术 | 本科]], align(right)[#text(size: 10.8pt, fill: rgb("#555555"))[2022.09 – 2026.06 | GPA 3.82/4.0 | 排名 5/120]])
+#grid(columns: (1fr, auto), [#text(weight: "bold")[某某大学 | 计算机科学与技术 | 本科]], align(right)[#text(size: 10.8pt, fill: rgb("#555555"))[2022.09 – 2026.06 | GPA 3.82/4.0 | 排名 5/120（前 4.2%）]])
 
 - 核心课程：数据结构 95、操作系统 92、机器学习 94、数据库系统 91
-- 在校荣誉：国家奖学金（2024）、校级三好学生（2023、2024）
-
-#v(2pt)
-#text(size: 13.8pt, weight: "bold", fill: rgb("#1f4e79"))[项目经历]
-#v(-6pt)#line(length: 100%, stroke: 0.7pt + rgb("#1f4e79"))#v(3pt)
-#grid(columns: (1fr, auto), [#text(weight: "bold")[校园二手交易平台]], align(right)[#text(size: 10.8pt, fill: rgb("#555555"))[后端负责人 | 2024.03 – 2024.06 | 课程项目]])
-
-- 基于 Spring Boot 实现 23 个 REST 接口，覆盖商品发布、搜索、下单、评价全链路
-- 用 Elasticsearch 重构商品检索，平均响应时间从 1200ms 降至 180ms
-- 引入 Redis 缓存热门列表与会话，缓存命中率 87%，数据库 QPS 从 800 降至 210
 
 #v(2pt)
 #text(size: 13.8pt, weight: "bold", fill: rgb("#1f4e79"))[专业技能]
@@ -32,6 +22,28 @@
 #block(spacing: 0.62em)[框架/库：PyTorch、Spring Boot、React]
 #block(spacing: 0.62em)[工具/环境：Git、Docker、Linux]
 #block(spacing: 0.62em)[英语：CET-6 550]
+
+#v(2pt)
+#text(size: 13.8pt, weight: "bold", fill: rgb("#1f4e79"))[项目与科研经历]
+#v(-6pt)#line(length: 100%, stroke: 0.7pt + rgb("#1f4e79"))#v(3pt)
+#grid(columns: (1fr, auto), [#text(weight: "bold")[基于图神经网络的校园社交推荐]], align(right)[#text(size: 10.8pt, fill: rgb("#555555"))[核心成员 | 2025.03 – 至今 | 某大学计算机学院实验室]])
+
+- 冷启动用户前 7 天推荐点击率从 2.1% 提升到 3.4%
+
+#v(3pt)
+#grid(columns: (1fr, auto), [#text(weight: "bold")[校园二手交易平台]], align(right)[#text(size: 10.8pt, fill: rgb("#555555"))[后端负责人 | 2024.03 – 2024.06 | 某大学]])
+
+- 重构检索链路后平均响应时间从 1200ms 降至 180ms
+
+#v(3pt)
+#grid(columns: (1fr, auto), [#text(weight: "bold")[推荐算法实习]], align(right)[#text(size: 10.8pt, fill: rgb("#555555"))[算法实习生 | 2025.07 – 2025.09 | 某科技公司]])
+
+- 负责召回通道的特征迭代，离线 AUC 提升 0.008
+
+#v(3pt)
+#grid(columns: (1fr, auto), [#text(weight: "bold")[Dual-Channel Graph Aggregation for Cold-Start Recommendation]], align(right)[#text(size: 10.8pt, fill: rgb("#555555"))[第一作者 | 2025.09 | ACM RecSys 2025]])
+
+- 提出双通道图聚合结构，冷启动场景 Recall\@20 提升 11.7%
 
 #v(2pt)
 #text(size: 13.8pt, weight: "bold", fill: rgb("#1f4e79"))[荣誉奖项]

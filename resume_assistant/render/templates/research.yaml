@@ -1,0 +1,39 @@
+key: research
+name: 科研·论文导向
+description: 论文与专利单独成段，教育段突出 GPA、排名、实验室与导师；适合保研/直博/科研岗
+page:
+  margin_x: 1.8cm
+  margin_y: 1.5cm
+  font_size: 10.5pt
+  max_scale: 1.12
+  accent: "#1f3a5f"
+sections:
+  # variant: research 把 GPA 和排名排到时间前面，并补一行「实验室 / 导师」
+  # ——导师扫简历先看成绩和师承，再看年份
+  - type: education
+    title: 教育背景
+    max_entries: 3
+    variant: research
+  - type: research_interest
+    title: 研究兴趣
+    max_entries: 1
+  # 论文和专利只在这里出现一次，后面的经历段不会再重复
+  - type: publications
+    title: 论文与专利
+    max_entries: 6
+  - type: experience
+    title: 科研与实习经历
+    max_entries: 3
+    bullets_per_entry: 4
+    include_kinds: [intern, research]
+  - type: projects
+    title: 项目经历
+    max_entries: 3
+    bullets_per_entry: 3
+    include_kinds: [project, course, award, activity]
+  - type: skills
+    title: 专业技能
+    max_entries: 1
+  - type: honors
+    title: 荣誉奖项
+    max_entries: 6

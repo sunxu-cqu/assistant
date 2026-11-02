@@ -47,7 +47,7 @@ USER_TMPL = """请从下面的项目资料中抽取成就单元。
 {{
   "items": [
     {{
-      "kind": "project|intern|research|course|award|activity",
+      "kind": "project|intern|research|course|award|activity|paper|patent",
       "title": "一句话项目名（≤20字）",
       "subtitle": "来源说明，如 课程项目 / 暑期实习 / 实验室课题",
       "org": "学校或公司名",
@@ -81,6 +81,9 @@ USER_TMPL = """请从下面的项目资料中抽取成就单元。
   但只有每条都能独立说清「我做了什么 + 得到什么」时才拆；
   同一件事换个说法不算新的一条。
 - weight 表示这个成就对「保研/实习」两类投递的综合重要度，0~1。
+- 论文和专利单独成文件夹时，kind 填 paper / patent：title 写论文或专利名，org 写
+  期刊/会议或专利类型，role 写作者位次（如 第一作者 / 第二发明人），period 写发表或
+  授权年月。混进 project 会让「做过什么」和「发过什么」分不清，而导师只看后者。
 - metrics 若资料中没有数字，返回空数组 []。
 - 若文件夹名带年份（如「2024-校园二手交易平台」），而资料正文没写时间，
   period 可以填该年份（如「2024」）——文件夹名是本人起的，算可靠来源。
@@ -165,7 +168,16 @@ def _collect_numbers(text: str) -> list[str]:
     return sorted({n for n in nums if len(n) <= 10}, key=lambda x: (len(x), x))
 
 
+EVIDENCE_KINDS = {"project", "intern", "research", "course", "award", "activity", "paper", "patent"}
+
+
 def _to_evidence(raw: dict[str, Any], folder: ProjectFolder, idx: int) -> Evidence:
+    # kind 走白名单：Evidence.kind 是 Literal，模型冒出个 "journal" / "竞赛" 就会
+    # 直接抛 ValidationError，一个文件夹抽出来的全部条目一起丢。标错类型只是分类
+    # 不准，退回 project 还能用，比整份资料作废划算。
+    kind = str(raw.get("kind", "project")).strip().lower()
+    if kind not in EVIDENCE_KINDS:
+        kind = "project"
     metrics = []
     for m in raw.get("metrics") or []:
         if not isinstance(m, dict) or not str(m.get("value", "")).strip():
@@ -194,7 +206,7 @@ def _to_evidence(raw: dict[str, Any], folder: ProjectFolder, idx: int) -> Eviden
     eid = f"ev_{slugify(folder.name, 24)}_{idx:02d}"
     return Evidence(
         id=eid,
-        kind=raw.get("kind", "project"),
+        kind=kind,
         title=title,
         subtitle=str(raw.get("subtitle", "")).strip(),
         org=str(raw.get("org", "")).strip(),

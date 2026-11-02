@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ..models import ResumeIR
 from ..compose.templates import Template
+from ..config import ROOT
 
 SPECIAL = {
     "\\": "\\\\",
@@ -28,6 +29,10 @@ SPECIAL = {
 
 FONT_STACK = '"Microsoft YaHei", "SimHei", "Source Han Sans SC", "Noto Sans CJK SC", "PingFang SC"'
 
+# 页眉可显示的字段及其默认顺序。模板的 page.header_fields 只能从这个表里挑，
+# 写错的字段名会被忽略而不是渲染成空白（YAML 里少个字母不该让简历开天窗）。
+HEADER_ORDER = ["gender", "birth", "political", "phone", "email", "city", "homepage"]
+
 
 def esc(text: str) -> str:
     return "".join(SPECIAL.get(ch, ch) for ch in (text or ""))
@@ -40,7 +45,7 @@ def _parse_pt(v: object, default: float = 10.0) -> float:
         return default
 
 
-def build_source(ir: ResumeIR, template: Template, font_size: float | None = None) -> str:
+def build_source(ir: ResumeIR, template: Template, font_size: float | None = None, photo: str = "") -> str:
     page = template.page or {}
     mx = page.get("margin_x", "1.6cm")
     my = page.get("margin_y", "1.4cm")
@@ -55,16 +60,21 @@ def build_source(ir: ResumeIR, template: Template, font_size: float | None = Non
 
     contact = ir.contact
     name = esc(contact.get("name", "未填写姓名"))
-    info_parts = [
-        contact.get("gender", ""),
-        (contact.get("birth", "") + " 生") if contact.get("birth") else "",
-        contact.get("political", ""),
-        contact.get("phone", ""),
-        contact.get("email", ""),
-        contact.get("city", ""),
-        contact.get("homepage", ""),
-    ]
-    info = "  ·  ".join(esc(p) for p in info_parts if p)
+    # 页眉显示哪些字段由模板决定：体制内版要把性别/出生/政治面貌挪到「基本信息」段，
+    # 页眉只留电话邮箱，否则同一份简历上「政治面貌」会出现两次。
+    header_fields = page.get("header_fields") or HEADER_ORDER
+    keys = [k for k in header_fields if k in HEADER_ORDER]
+    info_parts = []
+    for k in keys:
+        v = contact.get(k, "")
+        if not v:
+            continue
+        info_parts.append(esc(v + " 生") if k == "birth" else esc(v))
+    info = "  ·  ".join(info_parts)
+
+    title_lines = ['#align(center)[#text(size: %s, weight: "bold")[%s]]' % (name_size, name)]
+    if info:
+        title_lines.append('#align(center)[#v(-2pt)#text(size: %s, fill: rgb("#555555"))[%s]]' % (meta_size, info))
 
     lines: list[str] = [
         '#set page(paper: "a4", margin: (x: %s, y: %s))' % (mx, my),
@@ -73,10 +83,21 @@ def build_source(ir: ResumeIR, template: Template, font_size: float | None = Non
         "#set list(indent: 0.8em, marker: [·], spacing: 0.42em)",
         "#set text(fill: rgb(\"#1a1a1a\"))",
         "",
-        "#align(center)[#text(size: %s, weight: \"bold\")[%s]]" % (name_size, name),
-        "#align(center)[#v(-2pt)#text(size: %s, fill: rgb(\"#555555\"))[%s]]" % (meta_size, info) if info else "",
-        "",
     ]
+    if photo:
+        # 照片靠右、姓名居中：两侧各留同宽的空列，姓名才真的在纸张中线上。
+        # 只放右列的话，姓名会被照片挤到偏左，打印出来一眼就能看出歪。
+        lines += [
+            "#grid(",
+            "  columns: (2.6cm, 1fr, 2.6cm),",
+            "  [],",
+            "  [" + "\n   ".join(title_lines) + "],",
+            '  align(right)[#image("%s", width: 2.4cm)]' % photo,
+            ")",
+        ]
+    else:
+        lines += title_lines
+    lines.append("")
 
     for sec in ir.sections:
         if not sec.entries:
@@ -101,7 +122,9 @@ def build_source(ir: ResumeIR, template: Template, font_size: float | None = Non
                 lines.append('#text(size: %s, fill: rgb("#555555"))[%s]' % (meta_size, esc(entry.meta)))
 
             if entry.bullets:
-                if sec.type == "skills":
+                # skills / basic_info / family 是逐行的信息，research_interest 是成段叙述，
+                # 都不该加列表符号——加了会读成「若干条成就」，语义就错了
+                if sec.type in {"skills", "basic_info", "family", "research_interest"}:
                     # 技能行不用列表符号，逐行排列
                     lines.append("#v(5pt)")
                     for b in entry.bullets:
@@ -118,10 +141,38 @@ def build_source(ir: ResumeIR, template: Template, font_size: float | None = Non
     return "\n".join(l for l in lines if l is not None)
 
 
-def _compile(ir: ResumeIR, template: Template, out_dir: Path, size: float, stem: str) -> Path | None:
+_PHOTO_EXT = {".png", ".jpg", ".jpeg"}
+
+
+def _prepare_photo(ir: ResumeIR, template: Template, out_dir: Path) -> str:
+    """把证件照复制进输出目录，返回 typst 能引用的文件名；没有可用照片就返回空串。
+
+    typst 编译时 root 设成 out_dir，引用 root 之外的文件会直接编译失败，
+    而照片通常躺在用户自己的目录里。所以复制一份进来，不引用原路径。
+    返回空串就表示「不画照片」——画个空框比不画更糟，那是「你没准备好」的证据。
+    """
+    if not (template.page or {}).get("photo"):
+        return ""
+    raw = str((ir.contact or {}).get("photo", "")).strip()
+    if not raw:
+        return ""
+    src = Path(raw)
+    if not src.is_absolute():
+        src = ROOT / src
+    if not src.exists() or src.suffix.lower() not in _PHOTO_EXT:
+        return ""
+    dst = out_dir / f"_photo{src.suffix.lower()}"
+    try:
+        dst.write_bytes(src.read_bytes())
+    except OSError:
+        return ""
+    return dst.name
+
+
+def _compile(ir: ResumeIR, template: Template, out_dir: Path, size: float, stem: str, photo: str = "") -> Path | None:
     """按指定字号编译一次，返回 PDF 路径；失败返回 None。"""
     typ_path = out_dir / f"{stem}.typ"
-    typ_path.write_text(build_source(ir, template, font_size=size), encoding="utf-8")
+    typ_path.write_text(build_source(ir, template, font_size=size, photo=photo), encoding="utf-8")
     pdf_path = out_dir / f"{stem}.pdf"
     try:
         import typst
@@ -163,12 +214,13 @@ def render_pdf(
     page = template.page or {}
     base = _parse_pt(page.get("font_size", "10pt"))
     max_scale = float(page.get("max_scale", 1.20))
+    photo = _prepare_photo(ir, template, out_dir)
 
     typ_path = out_dir / "resume.typ"
     pdf_path = out_dir / "resume.pdf"
 
     # 基准字号：这一步必须成功，失败就是真的渲染不了
-    typ_path.write_text(build_source(ir, template, font_size=base), encoding="utf-8")
+    typ_path.write_text(build_source(ir, template, font_size=base, photo=photo), encoding="utf-8")
     try:
         import typst
 
@@ -191,11 +243,11 @@ def render_pdf(
         size = round(base * scale, 2)
         if size <= chosen:
             continue
-        trial_pdf = _compile(ir, template, out_dir, size, stem=f"_fit{k}")
+        trial_pdf = _compile(ir, template, out_dir, size, stem=f"_fit{k}", photo=photo)
         pages = _page_count(trial_pdf) if trial_pdf else None
         if pages is not None and pages <= base_pages:
             chosen = size
-            typ_path.write_text(build_source(ir, template, font_size=chosen), encoding="utf-8")
+            typ_path.write_text(build_source(ir, template, font_size=chosen, photo=photo), encoding="utf-8")
             pdf_path.write_bytes(trial_pdf.read_bytes())
             break
 

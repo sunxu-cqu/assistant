@@ -32,6 +32,20 @@ class Education(BaseModel):
     gpa_rank_pct: str = ""
     courses: list[str] = Field(default_factory=list)
     honors: list[str] = Field(default_factory=list)
+    # 科研型模板会把它写进教育段：保研简历上「哪个实验室、跟谁」比课程分更有信息量
+    lab: str = ""
+    advisor: str = ""
+
+
+class FamilyMember(BaseModel):
+    """家庭成员。国企/事业单位的应聘登记表常要求，普通实习简历用不上。"""
+
+    model_config = ConfigDict(coerce_numbers_to_str=True)
+
+    name: str = ""
+    relation: str = ""
+    workplace: str = ""
+    political: str = ""
 
 
 class Skills(BaseModel):
@@ -56,6 +70,16 @@ class Profile(BaseModel):
     city: str = ""
     political: str = ""
     homepage: str = ""
+    # 以下四项是体制内/国企应聘登记表的固定栏目。普通实习简历不填也不影响，
+    # 因为只有 gov_soe 模板会读它们（basic_info 段）。
+    native_place: str = ""   # 籍贯
+    height: str = ""
+    weight: str = ""
+    health: str = ""
+    # 证件照路径。只在模板声明了 page.photo 且文件真的存在时才画——
+    # 画一个空框比不画更糟，那是「你没准备好」的视觉证据。
+    photo: str = ""
+    family: list[FamilyMember] = Field(default_factory=list)
     education: list[Education] = Field(default_factory=list)
     skills: Skills = Field(default_factory=Skills)
     summary: str = ""
@@ -112,7 +136,10 @@ class Variants(BaseModel):
 
 class Evidence(BaseModel):
     id: str
-    kind: Literal["project", "intern", "research", "course", "award", "activity"] = "project"
+    # paper / patent 单列出来，是为了让科研型模板能把「论文与专利」单独成段。
+    # 塞进 project 里的话，简历上「基于 XXX 的改进」和「论文《XXX》」会混在一起，
+    # 而这两类东西在导师眼里的分量完全不同。
+    kind: Literal["project", "intern", "research", "course", "award", "activity", "paper", "patent"] = "project"
     title: str
     subtitle: str = ""
     org: str = ""

@@ -176,6 +176,8 @@ def main() -> int:
 
     print("\n[3b] 保研套磁 PPT")
     check("前端有套磁 PPT 入口", "openDeckModal" in html, "ui.html 里找不到 openDeckModal")
+    check("前端有模板选择入口", "openGenModal" in html, "ui.html 里找不到 openGenModal")
+    check("前端有模板选择入口", "openGenModal" in html, "ui.html 里找不到 openGenModal")
 
     code, res = post(
         "/api/jobs",

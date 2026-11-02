@@ -75,7 +75,12 @@ function fixture() {
     ],
     apps: [{ id: "app_1", status: "composed" }],
     profile: { ok: true, name: "张三", school: "某某大学", major: "计算机科学与技术", example: true },
-    templates: [{ key: "single_column" }, { key: "two_column" }],
+    templates: [
+      { key: "single_column", name: "单栏·通用实习", description: "ATS 友好" },
+      { key: "academic", name: "学术·保研套磁", description: "前置研究兴趣" },
+      { key: "gov_soe", name: "体制内·国企版", description: "照片位与政治面貌" },
+      { key: "research", name: "科研·论文导向", description: "论文单独成段" },
+    ],
     doctor: {
       ok: true, failed: 0, warned: 1, root: "C:\\简历助手",
       checks: [
@@ -142,7 +147,7 @@ function makeInstance(mode, data) {
   const win = { addEventListener(type, fn) { if (type === "message") onMessage = fn; } };
   const factory = new Function(
     "document", "window", "acquireVsCodeApi", "setTimeout",
-    SRC + "\n;return {refresh, render, state, viewBoard, viewJobs, viewKb, viewSystem, doGen, doMatch, doLetter, buildKb, openDeckModal, submitDeck, setView};"
+    SRC + "\n;return {refresh, render, state, viewBoard, viewJobs, viewKb, viewSystem, doGen, doMatch, doLetter, buildKb, openDeckModal, submitDeck, openGenModal, submitGen, setView};"
   );
   const fns = factory(doc, win, () => api, (fn) => fn());
   return { fns, doc, nodes, sent };
@@ -280,6 +285,25 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const warnHtml = panel.nodes["#modalBody"].innerHTML;
   check("有提醒就弹出来", warnHtml.includes("why 页"), warnHtml.slice(0, 80));
   check("提醒里给结构文件路径", warnHtml.includes("deck.yaml"));
+
+  console.log("\n[8] 生成前选模板");
+  fns.openGenModal("job_2", "baoyan");
+  const genModal = panel.nodes["#modalBody"].innerHTML;
+  check("弹窗列出四套模板", (genModal.match(/<option/g) || []).length === 4,
+    String((genModal.match(/<option/g) || []).length));
+  check("保研默认学术版", /value="academic" selected/.test(genModal), genModal.slice(0, 200));
+  check("模板带中文名", genModal.includes("体制内·国企版"), genModal.slice(0, 200));
+
+  fns.openGenModal("job_1", "internship");
+  check("实习默认单栏", /value="single_column" selected/.test(panel.nodes["#modalBody"].innerHTML));
+
+  panel.doc.querySelector("#genTpl").value = "gov_soe";
+  const m6 = calls().length;
+  await fns.submitGen("job_1");
+  await sleep(30);
+  const gen2 = calls().slice(m6).filter((x) => x.tool === "resume_generate")[0];
+  check("选了哪套就发哪套", gen2 && gen2.args.template === "gov_soe", JSON.stringify(gen2 && gen2.args));
+  check("带上 job_id", gen2 && gen2.args.job_id === "job_1", JSON.stringify(gen2 && gen2.args));
 
   console.log("\n" + "=".repeat(46));
   console.log(`通过 ${PASS} 项，失败 ${FAILS.length} 项`);

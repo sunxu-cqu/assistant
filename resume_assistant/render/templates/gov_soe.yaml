@@ -1,0 +1,41 @@
+key: gov_soe
+name: 体制内·国企版
+description: 照片位、政治面貌与籍贯、荣誉前置、配色克制；适合国企/事业单位网申与纸质投递
+page:
+  margin_x: 1.8cm
+  margin_y: 1.5cm
+  font_size: 10pt
+  # 体制内的表格式简历普遍偏满，字号自适应只留一点点余量
+  max_scale: 1.08
+  accent: "#2f3b46"
+  # 证件照只在 profile.photo 指向的文件真的存在时才画，没有就整块留白
+  photo: true
+  # 性别/出生/政治面貌挪到「基本信息」段（登记表的固定栏目），页眉只留联系方式。
+  # 两处都写的话，同一份简历上「政治面貌」会出现两次
+  header_fields: [phone, email, city]
+sections:
+  - type: basic_info
+    title: 基本信息
+  - type: education
+    title: 教育背景
+    max_entries: 3
+  # 荣誉提前：国企筛简历的人先看「有没有拿过奖、是不是党员」
+  - type: honors
+    title: 荣誉奖项
+    max_entries: 8
+  # 不写 include_kinds 的话论文/专利会混进项目段，与「项目与实习经历」的语义不符
+  - type: projects
+    title: 项目与实习经历
+    max_entries: 4
+    bullets_per_entry: 3
+    include_kinds: [project, intern, research, course, award, activity]
+  # 论文/专利单独一段而不是并进项目：国企网申表里「科研成果」是独立一栏，
+  # 混在项目里会被当成「做过的一个项目」，反而看不出是发表过的成果
+  - type: publications
+    title: 论文与专利
+    max_entries: 4
+  - type: family
+    title: 家庭成员
+  - type: skills
+    title: 专业技能
+    max_entries: 1

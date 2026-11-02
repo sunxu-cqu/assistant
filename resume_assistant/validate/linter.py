@@ -28,6 +28,8 @@ IGNORE_WORDS = {
     "pdf", "docx", "md", "json", "yaml", "sql", "api", "id",
     # 度量单位与常见缩写，不属于技术栈
     "ms", "qps", "p99", "p95", "p90", "gb", "mb", "tb", "kb",
+    # 身高体重的单位：「175cm」里的 cm 会被当成技术名词，这是纯误报
+    "cm", "mm", "kg", "ml", "km", "hz", "mhz", "ghz", "pt", "px", "inch",
 }
 
 
@@ -66,6 +68,17 @@ def _allowed_numbers(evidences: list[Evidence], profile: Profile) -> set[str]:
     for text in [s.english, *s.all_tags()]:
         for n in NUM_RE.findall(text or ""):
             allowed.add(n)
+    # 基本信息段（籍贯 / 身高体重 / 健康状况）和家庭成员也来自档案，
+    # 这些字段里的数字同样算有出处——否则「身高 175」会被判成编造
+    basics = [
+        profile.native_place, profile.height, profile.weight, profile.health,
+        profile.political, profile.city, profile.birth, profile.phone,
+    ]
+    for m in profile.family:
+        basics += [m.name, m.relation, m.workplace, m.political]
+    for text in basics:
+        for n in NUM_RE.findall(text or ""):
+            allowed.add(n)
     return allowed
 
 
@@ -78,6 +91,11 @@ def _allowed_techs(evidences: list[Evidence], profile: Profile) -> set[str]:
     for ev in evidences:
         tags |= {t.lower() for t in ev.skill_tags}
         tags |= {t.lower() for t in ev.domain_tags}
+    # 基本信息段的内容也是档案里的事实（籍贯、身高体重、健康状况），
+    # 出现在简历上不算「编造技术词」
+    for text in (profile.native_place, profile.height, profile.weight, profile.health):
+        if text:
+            tags.add(text.lower())
     return tags
 
 

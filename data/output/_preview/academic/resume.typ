@@ -10,35 +10,34 @@
 #v(2pt)
 #text(size: 13.8805pt, weight: "bold", fill: rgb("#4a3b78"))[教育背景]
 #v(-6pt)#line(length: 100%, stroke: 0.7pt + rgb("#4a3b78"))#v(3pt)
-#grid(columns: (1fr, auto), [#text(weight: "bold")[某某大学 | 计算机科学与技术 | 本科]], align(right)[#text(size: 10.863pt, fill: rgb("#555555"))[2022.09 – 2026.06 | GPA 3.82/4.0 | 排名 5/120]])
+#grid(columns: (1fr, auto), [#text(weight: "bold")[某某大学 | 计算机科学与技术 | 本科]], align(right)[#text(size: 10.863pt, fill: rgb("#555555"))[2022.09 – 2026.06 | GPA 3.82/4.0 | 排名 5/120（前 4.2%）]])
 
 - 核心课程：数据结构 95、操作系统 92、机器学习 94、数据库系统 91
-- 在校荣誉：国家奖学金（2024）、校级三好学生（2023、2024）
 
 #v(2pt)
 #text(size: 13.8805pt, weight: "bold", fill: rgb("#4a3b78"))[研究兴趣]
 #v(-6pt)#line(length: 100%, stroke: 0.7pt + rgb("#4a3b78"))#v(3pt)
-
-- 研究兴趣集中于图神经网络、社交推荐、冷启动问题。关注推荐系统与图神经网络在真实业务场景下的落地，具备从数据处理到线上部署的完整工程经验。
+#v(5pt)
+#block(spacing: 0.62em)[研究兴趣集中于图神经网络、推荐系统，希望结合已有工程经验继续深入。]
 
 #v(2pt)
 #text(size: 13.8805pt, weight: "bold", fill: rgb("#4a3b78"))[科研与实习经历]
 #v(-6pt)#line(length: 100%, stroke: 0.7pt + rgb("#4a3b78"))#v(3pt)
 #grid(columns: (1fr, auto), [#text(weight: "bold")[基于图神经网络的校园社交推荐]], align(right)[#text(size: 10.863pt, fill: rgb("#555555"))[核心成员 | 2025.03 – 至今 | 某大学计算机学院实验室]])
 
-- 复现 LightGCN 与 NGCF 两个基线，在自建校园社交数据集上完成对比实验
-- 提出用户-物品二部图叠加社交子图的双通道聚合结构，缓解冷启动问题
-- 设计消融实验验证社交通道作用，去掉后冷启动用户 Recall\@20 下降 11.7%
-- 冷启动用户前 7 天推荐点击率从 2.1% 提升到 3.4%，相对提升 61.9%
+- 冷启动用户前 7 天推荐点击率从 2.1% 提升到 3.4%
+
+#v(3pt)
+#grid(columns: (1fr, auto), [#text(weight: "bold")[推荐算法实习]], align(right)[#text(size: 10.863pt, fill: rgb("#555555"))[算法实习生 | 2025.07 – 2025.09 | 某科技公司]])
+
+- 负责召回通道的特征迭代，离线 AUC 提升 0.008
 
 #v(2pt)
 #text(size: 13.8805pt, weight: "bold", fill: rgb("#4a3b78"))[项目经历]
 #v(-6pt)#line(length: 100%, stroke: 0.7pt + rgb("#4a3b78"))#v(3pt)
-#grid(columns: (1fr, auto), [#text(weight: "bold")[校园二手交易平台]], align(right)[#text(size: 10.863pt, fill: rgb("#555555"))[后端负责人 | 2024.03 – 2024.06 | 课程项目]])
+#grid(columns: (1fr, auto), [#text(weight: "bold")[校园二手交易平台]], align(right)[#text(size: 10.863pt, fill: rgb("#555555"))[后端负责人 | 2024.03 – 2024.06 | 某大学]])
 
-- 基于 Spring Boot 实现 23 个 REST 接口，覆盖商品发布、搜索、下单、评价全链路
-- 用 Elasticsearch 重构商品检索，平均响应时间从 1200ms 降至 180ms
-- 引入 Redis 缓存热门列表与会话，缓存命中率 87%，数据库 QPS 从 800 降至 210
+- 重构检索链路后平均响应时间从 1200ms 降至 180ms
 
 #v(2pt)
 #text(size: 13.8805pt, weight: "bold", fill: rgb("#4a3b78"))[专业技能]

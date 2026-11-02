@@ -18,6 +18,27 @@ city: 北京
 political: 共青团员
 homepage: ""
 
+# ---- 下面四项只在「体制内·国企版」模板里出现，投互联网实习可以全部留空 ----
+# 页眉默认显示 性别/出生/政治面貌/电话/邮箱/城市；国企版把它们挪进「基本信息」段，
+# 页眉只留联系方式，避免同一个字段在纸上出现两次。
+native_place: 山东济南
+height: 175cm
+weight: 65kg
+health: 良好
+# 证件照：相对项目根的路径或绝对路径。文件不存在就整块不画（不会留空框）
+photo: ""
+
+# 家庭成员：同样只在国企版模板里出现
+family:
+  - name: 张建国
+    relation: 父亲
+    workplace: 某中学教师
+    political: 中共党员
+  - name: 李秀兰
+    relation: 母亲
+    workplace: 某医院护士
+    political: 群众
+
 education:
   - school: 某某大学
     degree: 本科
@@ -26,6 +47,9 @@ education:
     gpa: 3.82/4.0
     gpa_rank: 5/120
     gpa_rank_pct: 4.2%
+    # 实验室与导师只在「科研·论文导向」模板里出现，写进教育段比单独开一段更省地方
+    lab: 智能计算实验室
+    advisor: 王教授
     courses:
       - 数据结构 95
       - 操作系统 92
